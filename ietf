@@ -1,0 +1,516 @@
+#!/usr/bin/python
+from __future__ import print_function
+from cmd import Cmd
+from fnmatch import filter as fnfilter
+from glob import glob
+from optparse import OptionParser
+from os import chdir, environ, link, listdir, mkdir, system, unlink
+from os.path import basename, exists as pathexists, expanduser, isdir, join as pathjoin
+from pdb import set_trace as trace
+from re import compile, search
+from subprocess import Popen, PIPE
+from sys import argv, excepthook
+from time import strftime
+
+'''
+Program to help command-line users have better access to IETF-related documents
+   See help text below.
+'''
+__version__ = "1.0"
+
+##########
+# Utility functions and definitions
+##########
+
+KnownCmds = ("charter", "diff", "draft", "mirror", "rfc", "tools", "tracker")
+ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config")
+WasPublishedPatt = compile(r"was\s*published")
+NewRequestPatt = compile(r"new\s*Request\s*for\s*Comments")
+HasExpiredPatt = compile(r"has\s*expired")
+HasBeenReplacedPatt = compile(r"has\s*been\s*replaced")
+RFCNamePatt = compile(r"RFC\s*(\d\d\d\d)")
+AnotherDocPatt = compile(r"another\s*document,\s*(draft-.*),")
+
+# Given a draft's filename, display it if it s a full draft but not otherwise
+def ShowDraft(filename):
+	ThisBaseName = basename(filename)
+	TheDiffs = glob(pathjoin(FullRFCDir, "authors", "*-diff.html"))
+	for ThisDiff in TheDiffs:
+		try:
+			InText = open(ThisDiff, "r").read()
+		except:
+			exit("Weird: could not read '" + ThisDiff + "' even though it exists. Exit.")
+		if InText.find("<strike><font color='red'>" + ThisBaseName) > -1:
+			print("This Internet-Draft is in AUTH48 state; see " + ThisDiff)
+			break
+	# If tombstones are to be displayed, display this file regardless
+	if DisplayTombstones:
+		system(DisplayTextCommand + filename)
+	else:
+		# Read in the whole file
+		try:
+			AllLines = open(filename, "r").readlines()
+		except:
+			print("Weird: could not open " + filename + " for reading. Skipping.")
+		# Get the first three lines of the file, and concatenate them with a space between
+		First3 = " ".join(AllLines[:2])
+		# Look for tombstones first, and if it is not a tombstone, display it
+		if ((WasPublishedPatt.search(First3) != None) or (NewRequestPatt.search(First3) != None)):
+			print(basename(filename) + " became an RFC")
+			# See if you can find the RFC number embedded in the text and, if so, display the RFC
+			if RFCNamePatt.search(First3) != None:
+				ThisRFCNum = RFCNamePatt.search(First3).expand(r"\1")
+				print("Displaying RFC " + ThisRFCNum)
+				Cmd_rfc([ThisRFCNum])
+			else:
+				pass  # There are probably some wierd cases where this string isn't found; ignore them
+		elif HasExpiredPatt.search(First3) != None:
+			print("Expired draft:  " + basename(filename))
+		elif HasBeenReplacedPatt.search(First3) != None:
+			print(basename(filename) + " has been replaced")
+			# See if you can find another draft name to open
+			if AnotherDocPatt.search(First3) != None:
+				TheReplacementDraft = AnotherDocPatt.search(First3).expand(r"\1")
+				TheReplacementDraft = TheReplacementDraft.replace(".txt", "")[:-3]
+				print("The draft replacing " + basename(filename) + " is " + TheReplacementDraft)
+				Cmd_draft([TheReplacementDraft])
+			else:
+				pass # There are probably many cases where this string isn't found; ignore them
+		else:
+			system(DisplayTextCommand + filename)
+
+# Open a URL in the browser, but give a warning in the terminal if the command is "less"
+def WebDisplay(TheURL, TheArg):
+	TheRet = system(DisplayWebCommand + TheURL + TheArg)
+	if TheRet > 0:
+		print("The command used to display web content, '" + DisplayWebCommand + "', had an error.'")
+	if DisplayWebCommand == "less ":
+		print("The reason that this HTML was displayed on your console is that you do not have\n" \
+			"'DisplayWebCommand' defined in the file '" + ConfigFile + "'.")
+
+# Creat a command-line processor for our commands
+class OurCLI(Cmd):
+	intro = "Command line processor for ietf commands; try 'help' for more info."
+	prompt = "ietf: "
+	# Make just pressing Return not do anything
+	def emptyline(self):
+		pass
+	# Make it easy to exit
+	def do_exit(self, RestOfArgs):
+		return True
+	do_quit = do_q = do_exit
+	def do_EOF(self, RestOfArgs):
+		print()
+		return True
+	def default(self, RestOfArgs):
+		print("Unknown command '" + RestOfArgs + "'. Try 'help' for a list of commands.")
+	# Let them do shell commands
+	def do_shell(self, RestOfArgs):
+		print("Execuiting shell command: '" + RestOfArgs + "'")
+		system(RestOfArgs)
+	# Fill in the needed definitions for all the known commands
+	for ThisCmd in KnownCmds:
+		TheCode = "def do_" + ThisCmd + "(self, RestOfArgs):\n\tCmd_" + ThisCmd + "(RestOfArgs.split(' '))" \
+			+ "\ndef help_" + ThisCmd + "(self):\n\tCheckHelp('" + ThisCmd + "', '__helptext__')"
+		exec(TheCode)
+	# Do our own help
+	def do_help(self, RestOfArgs):
+		if RestOfArgs in KnownCmds:
+			CheckHelp(RestOfArgs, "__helptext__")
+		else:
+			CheckHelp("allclicmds", "__helptext__")
+	# Allow to change tombstone setting
+	def do_tombstones(self, RestOfArgs):
+		global DisplayTombstones
+		DisplayTombstones = True
+	def do_maxdrafts(self, RestOfArgs):
+		try:
+			global MaxDrafts
+			MaxDrafts = int(RestOfArgs)
+		except:
+			exit("The argument to 'maxdrafts' must be a positive integer. Exiting.")
+	def do_usedraftnumbers(self, RestOfArgs):
+		UseDraftNumbers = True
+
+# Print help text if this is called with no args or with a single arg of "__helptext__"
+#   All commands other than "mirror" need args.
+def CheckHelp(TheCaller, InArgs):
+	if ((InArgs == "__helptext__") or ((InArgs == []) and (TheCaller != "mirror"))):
+		if HelpText.get(TheCaller, "") != "":
+			print(HelpText[TheCaller])
+		else:
+			print("No help text available for '" + TheCaller + "'.")
+		return True
+	else:
+		return False
+
+HelpText = {
+	"charter": '''charter:
+    Takes a list of WG names. Displays the charter for each WG using the text
+    dispay program. Wildcards are allowed in the charter names.''',
+	"diff": '''diff:
+    Takes a draft name (with or without the '-nn' version number or '.txt'
+    and displays the HTML diff between it and the preceding version on the
+    IETF Tools page using your web display program.''',
+	"draft": '''draft:
+    Takes a list of draft file names. Displays the drafts found using the text
+    dispay program. Wildcards are allowed in the draft names. There are 
+    command-line options to change the way this shows tombstones (where a
+    draft has expired or been replaced with an RFC). You can also give
+    'abstracts' as an argument to see 1id-abstracts.txt.''',
+	"mirror": '''mirror:
+    Updates your local mirror of IETF directories, such as all drafts, RFCs,
+    and WG charters.''',
+	"rfc": '''rfc:
+    Takes a list of RFC file names. Displays the RFCs found using the text
+    dispay program. You do not need to give 'rfc' or '.txt' in the file
+    names. You can also give 'index' as an argument to see rfc-index.txt.
+    This command searches both the main RFC directory and the pre-publication
+    (AUTH84) directory.''',
+	"tools": '''tools:
+    Takes a list of draft file names, RFC names, and/or WG names. Displays the
+    result from the IETF Tools pages in the web dispay program. Draft names
+    can be either complete or be missing the '-nn' version number and '.txt'.
+    RFC names can be given as 'rfc1234' or '1234'. WG names are matched
+    exactly.''',
+	"tracker": '''tracker:
+    Takes a list of draft file names and/or WG names. Displays the
+    result from the IETF Datatracker pages in the web dispay program. Draft names
+    and WG names are matched exactly.''',
+}
+AllHelp = "Command-line interface for displaying IETF-related information. Commands are:\n"
+for ThisHelp in sorted(HelpText.keys()):
+	AllHelp += " " + HelpText[ThisHelp] + "\n"
+AllCLIHelp = AllHelp
+AllShellHelp = AllHelp
+AllCLIHelp += "You can cause tombstone drafts to be displayed in the 'draft' command by\n" \
+	+ "  giving the 'tombstones' command by itself.\n" \
+	+ "You can increase the number of drafts that will be opened by the 'draft'\n" \
+	+ "  command by giving the 'maxdrafts' command followed by an integer.\n" \
+	+ "You can require that the 'draft' command only use full draft names\n" \
+	+ "  (including draft numbers and '.txt') by giving the 'usedraftnumbers'\n" \
+	+ "  command by itself.\n" \
+	+ "There is also a 'shell' command to give shell commands from within\n" \
+	+ "  this processor.\n" \
+	+ "Use 'q' or 'quit' or 'exit' to leave the program."
+HelpText["allclicmds"] = AllCLIHelp
+HelpText["allshellcmds"] = AllShellHelp
+
+##########
+# The commands themselves
+##########
+
+### charter -- Open charter files locally
+def Cmd_charter(Args):
+	if CheckHelp("charter", Args): return
+	# Get this list once to optimize if there are many WGs to look up
+	AllDirsInIETF = listdir(FullIETFDir)
+	for ThisArg in Args:
+		MatchingWGs = fnfilter(AllDirsInIETF, "*" + ThisArg + "*")
+		if len(MatchingWGs) > 10:
+			AllMatched = ", ".join(MatchingWGs)
+			print("More than 10 WGs match '*" + ThisArg + "*' in the IETF directory. Skipping.\n" + AllMatched)
+		elif len(MatchingWGs) == 0:
+			print("Did not find the WG that matches '*" + ThisArg + "*' in the IETF directory. Skipping.")
+		else:
+			for ThisWG in MatchingWGs:
+				WGDir = pathjoin(FullIETFDir, ThisWG)
+				if pathexists(WGDir):
+					CharterTextFile = pathjoin(WGDir, ThisWG + "-charter.txt")
+					if pathexists(CharterTextFile):
+						system(DisplayTextCommand + CharterTextFile)
+					else:
+						print("Found the WG directory for '" + ThisWG + "',\n" \
+							+ "but did not find the expected charter in that directory. Skipping.")
+
+### diff -- Show the diff between a draft and the previous one on the IETF Tools site
+def Cmd_diff(Args):
+	if CheckHelp("diff", Args): return
+	for ThisArg in Args:
+		if ThisArg.startswith("draft-"):
+			WebDisplay("http://tools.ietf.org/rfcdiff?url2=", ThisArg)
+		else:
+			print("The argument to this command must begin with 'draft-'.\n")
+
+### draft -- Open drafts locally
+def Cmd_draft(Args):
+	if CheckHelp("draft", Args): return
+	if UseDraftNumbers:  # Check directory with names including draft numbers
+		TargetDir = FullIDDir
+	else:   # Check directory with short names
+		TargetDir = FullShortIDDir
+	# Get this list once to optimize if there are many drafts to look up
+	AllDraftsInDir = listdir(TargetDir)
+	for ThisArg in Args:
+		# Special case: 'abstracts" returns the 1id-abstracts.txt file
+		if ThisArg == "abstracts":
+			system(DisplayTextCommand + pathjoin(FullIDDir, "1id-abstracts.txt"))
+		else:
+			# First check if it is a full name including numbers, regardless of short/long preference
+			if pathexists(pathjoin(FullIDDir, ThisArg)):
+				ShowDraft(pathjoin(FullIDDir, ThisArg))
+			# Optimize a bit if it is an exact match
+			elif pathexists(pathjoin(TargetDir, ThisArg)):  
+				ShowDraft(pathjoin(TargetDir, ThisArg))
+			else:
+				MatchingDrafts = fnfilter(AllDraftsInDir, "*" + ThisArg + "*")
+				# Remove the non-drafts from the list if they are in the long-name directory
+				if UseDraftNumbers:
+					for TxtCheck in list(MatchingDrafts):
+						if TxtCheck.endswith(".txt") == False:
+							MatchingDrafts.remove(TxtCheck)
+				if len(MatchingDrafts) == 0:
+					print("Could not find draft with substring '" + ThisArg + "' in '" + TargetDir + "'.")
+				elif len(MatchingDrafts) > MaxDrafts:
+					print("There are more than " + str(MaxDrafts) + " drafts that match the string '" \
+						+ ThisArg + "'; not displaying.\nYou can raise this count with ", end="")
+					if FromCommandLine:
+						print(" the '--maxdrafts' command-line argument,\nsuch as '--maxdrafts=40'.")
+					else:
+						print(" the 'maxdrafts' command,\nsuch as 'maxdrafts 40'.")
+					for ThisMatch in MatchingDrafts:
+						print("  " + basename(ThisMatch))
+				else:
+					for ThisMatch in MatchingDrafts:
+						ShowDraft(pathjoin(TargetDir, ThisMatch))
+
+### mirror -- Update the local mirror
+def Cmd_mirror(Args):
+	if CheckHelp("mirror", Args): return
+	# See if the main directory exists; if not, try to create it
+	if pathexists(expanduser(MirrorDir)) == False:
+		try:
+			mkdir(expanduser(MirrorDir))
+		except:
+			exit("The mirror directory '" + MirrorDir + "' does not exist, and could not be created. Exiting.")
+	if pathexists(expanduser(IDDir)) == False:
+		print("This appears to be the first time you are running this; it may take a long")
+		print("  time. Each mirror section will be named, but the files being mirrored will")
+		print("  only appear when the full directory has been mirrored; this can take hours,")
+		print("  depending on network speed. You can check the progress by looking in the")
+		print("  created directories.")
+	# Set up the log file
+	LogFile = expanduser(MirrorDir + "/mirror-log.txt")
+	try:
+		logf = open(LogFile, "a")
+	except:
+		exit("Could not open " + LogFile + " for appending. Exiting.\n")
+	# Print out to both the console and log file
+	def PrintLog(String):
+		print(String)
+		print(String, file=logf)
+	PrintLog("\nMirror began at " + strftime("%Y-%m-%d %H:%M:%S") + "\n")
+	# AllActions is the set of actions to be performed
+	# First see if it was already defined in the config file
+	if "AllActions" in globals():
+		AllActions = globals()["AllActions"]
+	else:
+		AllActions = [
+			[ "Internet Drafts", "rsync -avz --exclude='*.xml' --exclude='*.pdf' --exclude='*.p7s' " +
+				" --exclude='*.ps' --delete-after  www.ietf.org::internet-drafts " + IDDir ],
+			[ "IANA", "rsync -avz --delete-after  www.ietf.org::everything-ftp/iana/ " + IANADir ],
+			[ "IESG", "rsync -avz --delete-after  www.ietf.org::everything-ftp/iesg/ " + IESGDir ],
+			[ "IETF", "rsync -avz --delete-after  --exclude='ipr/' " +
+				"www.ietf.org::everything-ftp/ietf/ " + IETFDir ],
+			[ "RFCs", "rsync -avz --delete-after " +
+				" --exclude='tar*' --exclude='search*' --exclude='PDF-RFC*' " +
+				" --exclude='tst/' --exclude='pdfrfc/' --exclude='internet-drafts/' " +
+				" --exclude='ien/' ftp.rfc-editor.org::everything-ftp/in-notes/ " + RFCDir ]
+			]
+	for DoThis in AllActions:
+		PrintLog("Starting " + DoThis[0])
+		FullOut = []
+		p = Popen(DoThis[1], bufsize=-1, shell=True, stdout=PIPE)
+		while p.poll() is None:
+			FullOut.append(p.stdout.readline())
+		TheOut = ""
+		for ThisLine in FullOut:
+			# Need the following to prevent printing and parsing problems later
+			ThisLine = ThisLine.decode("ascii")
+			if ThisLine.startswith("receiving "): continue
+			if ThisLine.startswith("sent "): continue
+			if ThisLine.startswith("total "): continue
+			if ThisLine.startswith("skipping non-regular file "): continue
+			if ThisLine.endswith('.listing" [1]\n'): continue
+			if ThisLine == "\n": continue
+			TheOut += ThisLine
+		PrintLog(TheOut)
+	# Do the filling of the short-name directory
+	PrintLog("Filling short-name directory")
+	FullIDDir = expanduser(IDDir)
+	FullShortIDDir = expanduser(ShortIDDir)
+	# See if the directory mirrorded from the IETF exists and get the list of drafts
+	if pathexists(FullIDDir) == False:
+		exit("The directory with the drafts, " + IDDir + ", does not exist. Exiting.")
+	elif isdir(FullIDDir) == False:
+		exit(IDDir + "is not a directory. Exiting.")
+	try:
+		chdir(FullIDDir)
+	except:
+		exit("Weird: could not chdir to " + IDDir + ". Exiting.")
+	# Note that this is only making short names for .txt files, not any of the others
+	TheIDs = sorted(glob("draft-*.txt"))
+	# See if the directory to be copied to exists; if so, delete all the files there
+	if pathexists(FullShortIDDir) == False:
+		try:
+			mkdir(FullShortIDDir)
+		except:
+			exit("The directory where the shorter-named drafts will go, " + ShortIDDir + ", could not be created. Exiting.")
+	elif isdir(FullShortIDDir) == False:
+		exit(ShortIDDir + "is not a directory. Exiting.")
+	try:
+		chdir(FullShortIDDir)
+	except:
+		exit("Weird: could not chdir to " + ShortIDDir + ". Exiting.")
+	for ToDel in glob("*"):
+		if isdir(ToDel):
+			exit("Found a directory in " + ShortIDDir + ". Exiting.")
+		unlink(ToDel)
+	# Determine the shorter name and link the file with the destination
+	for ThisDraftName in TheIDs:
+		# Strip off "-nn.txt"
+		ShorterName = ThisDraftName[:-7]
+		# Test if the shorter name already exists; if so, nuke it
+		#   This is based on the the assumption that there are two drafts where the version numbers
+		#   are different, and because this is sorted, the higher ones should come later.
+		if pathexists(pathjoin(FullShortIDDir, ShorterName)):
+			unlink(pathjoin(FullShortIDDir, ShorterName))
+		try:
+			link(pathjoin(FullIDDir, ThisDraftName), pathjoin(FullShortIDDir, ShorterName))
+		except OSError as e:
+			print("For '" + ThisDraftName + "', got error: " + str(e) + ". Skipping.")
+	# Finish up
+	PrintLog("\nMirror ended at " + strftime("%Y-%m-%d %H:%M:%S"))
+	logf.close()
+
+### rfc -- Open RFCs locally
+def Cmd_rfc(Args):
+	if CheckHelp("rfc", Args): return
+	for ThisArg in Args:
+		# Special case: 'index' returns the rfc-index.txt file
+		if ThisArg == "index":
+			system(DisplayTextCommand + pathjoin(FullRFCDir, "rfc-index.txt"))
+		else:
+			RFCTests = [ ThisArg, ThisArg + ".txt", "rfc" + ThisArg, "rfc" + ThisArg + ".txt" ]
+			FoundRFC = False
+			for ThisTest in RFCTests:
+				# Also check in the AUTH48 directory
+				for WhichDir in (FullRFCDir, FullRFCDir + "/authors"):
+					if pathexists(pathjoin(WhichDir, ThisTest)):
+						FoundRFC = True
+						system(DisplayTextCommand + pathjoin(WhichDir, ThisTest))
+						break
+			if FoundRFC == False:
+				print("Could not find an RFC for '" + ThisArg + "' in '" + FullRFCDir + "'; skipping.")
+
+### tools -- Show RFCs, WGs, and drafts on the IETF Tools site
+def Cmd_tools(Args):
+	if CheckHelp("tools", Args): return
+	for ThisArg in Args:
+		# If it is just a number, check for the RFC
+		if ThisArg.isdigit():
+			WebDisplay("http://www.rfc-editor.org/info/rfc", ThisArg)
+		# If it starts with "rfc" and rest are digits, it is also an RFC
+		elif (ThisArg.startswith("rfc") and  ThisArg[3:].isdigit()):
+			WebDisplay("http://www.rfc-editor.org/info/", ThisArg)
+		# If it isn't an RFC and it has no hyphens, assume it is a WG
+		elif ThisArg.find("-") == -1:
+			WebDisplay("http://tools.ietf.org/wg/", ThisArg)
+		# Otherwise, assume it is a draft; this might get a 404
+		elif ThisArg.startswith("draft-"):
+			WebDisplay("http://tools.ietf.org/html/", ThisArg)
+		else:
+			print("This command is for finding RFCs, WGs (with no hypens) or drafts\n(that start with 'draft-')" \
+				+ " on the IETF Tools web site.\n")
+
+### tracker -- Show WGs and draft statuses on the Datatracker
+def Cmd_tracker(Args):
+	if CheckHelp("tracker", Args): return
+	for ThisArg in Args:
+		# If there is no hypen in it, assume it is a WG
+		if ThisArg.find("-") == -1:
+			WebDisplay("https://datatracker.ietf.org/wg/", ThisArg)
+		# If not, assume it is a draft
+		elif ThisArg.startswith("draft-"):  # This might get a 404
+			WebDisplay("https://datatracker.ietf.org/doc/", ThisArg)
+		else:
+			print("This command is for finding WGs (with no hypens) or drafts (that start with 'draft-')" \
+				+ " on the IETF Datatracker.\n")
+
+# For showing help when --help or -h is given on the command line
+def ShowCommandLineHelp(ignore1, ignore2, ignore3, ignore4):
+	CheckHelp("allshellcmds", "__helptext__")
+	exit()
+
+##########
+# The real program starts here
+##########
+
+Parse = OptionParser(add_help_option=False, usage="Something here")
+# Don't display tombstones unless option is given
+Parse.add_option("--tombstones", action="store_true", dest="DisplayTombstones", default=False)
+# Maximum number of drafts to display
+Parse.add_option("--maxdrafts", action="store", type="int", dest="MaxDrafts", default=10)
+# Only open drafts from directory with full draft names (including version numbers)
+Parse.add_option("--usedraftnumbers", action="store_true", dest="UseDraftNumbers", default=False)
+# Set up the help
+Parse.add_option("--help", "-h", action="callback", callback=ShowCommandLineHelp)
+(Opts, RestOfArgs) = Parse.parse_args()
+# Define these top-level variables to make it easier to change them from the config file
+DisplayTombstones = Opts.DisplayTombstones
+MaxDrafts = Opts.MaxDrafts
+UseDraftNumbers = Opts.UseDraftNumbers
+
+ConfigFile = ""
+for ThisPlace in ConfigPlaces:
+	if pathexists(expanduser(ThisPlace)):
+		ConfigFile = ThisPlace
+		break
+if ConfigFile == "":
+	exit("Could not find a configuration file in " + " or ".join(ConfigPlaces) + "\nExiting.")
+
+# Get the variable names for the directories and display mechanisms
+try:
+	Configs = open(expanduser(ConfigFile), "r").read()
+except:
+	exit("Could not open '" + expanduser(ConfigFile) + "' for input. Exiting.")
+try:
+	exec(Configs)
+except:
+	exit("Failed during exec of " + ConfigFile + ". Exiting.")
+
+# All the varialbes from the config file must be defined, and the named directories must exist.
+TheDirectories = ( "MirrorDir", "IDDir", "ShortIDDir", "IANADir", "IESGDir", "IETFDir", "RFCDir" )
+for ThisDir in TheDirectories:
+	if not ThisDir in dir():
+		exit("The variable '" + ThisDir + "' was not defined in " + ConfigFile + ". Exiting.")
+	globals()["Full" + ThisDir] = expanduser(globals()[ThisDir])
+	if not(pathexists(globals()["Full" + ThisDir])):
+		print("The directory '" + globals()["Full" + ThisDir] + "' does not exist.\n" \
+			+ "You need to run the 'ietf mirror' command before running any other command.\n")
+# The display mechanisms can be blank
+# Set defaults for the desplay commands if they are not set
+if DisplayTextCommand == "":
+	# If DisplayTextCommand is not set but the EDITOR environment variable is, use EDITOR instead
+	if environ.get("EDITOR", "") != "":
+		DisplayTextCommand = environ["EDITOR"] + " "
+	else:
+		DisplayTextCommand = "less "
+if DisplayWebCommand == "":
+	DisplayWebCommand = "less "  # This is a terrible fallback, of course
+
+# The "ietf" command can be called with no arguments to go to the internal command processor
+#    It is often called as "ietf" with arguments from the KnownCommand list.
+if RestOfArgs == []:
+	FromCommandLine = False
+	try:
+		OurCLI().cmdloop()
+	except KeyboardInterrupt:
+		exit("\n^C caught. Exiting.")
+else:
+	FromCommandLine = True
+	GivenCmd = RestOfArgs[0]
+	if GivenCmd in KnownCmds:
+		globals()["Cmd_" + GivenCmd](RestOfArgs[1:])
+	else:
+		exit("Found a bad command: " + GivenCmd + ". Exiting.")
