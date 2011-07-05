@@ -16,13 +16,20 @@ from time import strftime
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.0"
+__version__ = "1.1"
+
+# Version history:
+#  1.0
+#    Initial release
+#  1.1
+#    Added bcp
+#    Split out the command-calling in the CLI to make it clearer
 
 ##########
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("charter", "diff", "draft", "mirror", "rfc", "tools", "tracker")
+KnownCmds = ("bcp", "charter", "diff", "draft", "mirror", "rfc", "tools", "tracker")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config")
 WasPublishedPatt = compile(r"was\s*published")
 NewRequestPatt = compile(r"new\s*Request\s*for\s*Comments")
@@ -30,6 +37,17 @@ HasExpiredPatt = compile(r"has\s*expired")
 HasBeenReplacedPatt = compile(r"has\s*been\s*replaced")
 RFCNamePatt = compile(r"RFC\s*(\d\d\d\d)")
 AnotherDocPatt = compile(r"another\s*document,\s*(draft-.*),")
+
+# Make a block of text that can be executed in the CLI
+CLICmdCode = ""
+for ThisCmd in KnownCmds:
+	ThisCode = '''
+def do_REPLTHISCMD(self, RestOfArgs):
+  Cmd_REPLTHISCMD(RestOfArgs.split(' '))
+def help_REPLTHISCMD(self):
+  CheckHelp('REPLTHISCMD', '__helptext__')
+'''
+	CLICmdCode += ThisCode.replace("REPLTHISCMD", ThisCmd)
 
 # Given a draft's filename, display it if it s a full draft but not otherwise
 def ShowDraft(filename):
@@ -109,10 +127,8 @@ class OurCLI(Cmd):
 		print("Execuiting shell command: '" + RestOfArgs + "'")
 		system(RestOfArgs)
 	# Fill in the needed definitions for all the known commands
-	for ThisCmd in KnownCmds:
-		TheCode = "def do_" + ThisCmd + "(self, RestOfArgs):\n\tCmd_" + ThisCmd + "(RestOfArgs.split(' '))" \
-			+ "\ndef help_" + ThisCmd + "(self):\n\tCheckHelp('" + ThisCmd + "', '__helptext__')"
-		exec(TheCode)
+	#   This was created as CLICmdCode above
+	exec(CLICmdCode)
 	# Do our own help
 	def do_help(self, RestOfArgs):
 		if RestOfArgs in KnownCmds:
@@ -145,6 +161,10 @@ def CheckHelp(TheCaller, InArgs):
 		return False
 
 HelpText = {
+	"bcp": '''bcp:
+    Takes a list of BCP numbers. Displays the BCP RFCs found using the text
+    dispay program. You can also give 'index' as an argument to see
+    bcp-index.txt.''',
 	"charter": '''charter:
     Takes a list of WG names. Displays the charter for each WG using the text
     dispay program. Wildcards are allowed in the charter names.''',
@@ -166,7 +186,7 @@ HelpText = {
     dispay program. You do not need to give 'rfc' or '.txt' in the file
     names. You can also give 'index' as an argument to see rfc-index.txt.
     This command searches both the main RFC directory and the pre-publication
-    (AUTH84) directory.''',
+    (AUTH48) directory.''',
 	"tools": '''tools:
     Takes a list of draft file names, RFC names, and/or WG names. Displays the
     result from the IETF Tools pages in the web dispay program. Draft names
@@ -200,9 +220,30 @@ HelpText["allshellcmds"] = AllShellHelp
 # The commands themselves
 ##########
 
+### bcp -- Open BCPs locally
+def Cmd_bcp(Args):
+	if CheckHelp("bcp", Args): return
+	if Args[0] == "":
+		print("Must give at least one BCP number; skipping.")
+		return
+	for ThisArg in Args:
+		# Special case: 'index' returns the bcp-index.txt file
+		if ThisArg == "index":
+			system(DisplayTextCommand + pathjoin(FullRFCDir, "bcp-index.txt"))
+		else:
+			for ThisBCPNum in Args:
+				ThisBCPFile = pathjoin(FullRFCDir, "bcp", "bcp"+ ThisBCPNum + ".txt")
+				if pathexists(ThisBCPFile):
+					system(DisplayTextCommand + ThisBCPFile)
+				else:
+					print("Could not find the BCP " + ThisBCPNum + " as '" + ThisBCPFile + "'; skipping.")
+
 ### charter -- Open charter files locally
 def Cmd_charter(Args):
 	if CheckHelp("charter", Args): return
+	if Args[0] == "":
+		print("Must give at least one WG name; skipping.")
+		return
 	# Get this list once to optimize if there are many WGs to look up
 	AllDirsInIETF = listdir(FullIETFDir)
 	for ThisArg in Args:
@@ -226,6 +267,9 @@ def Cmd_charter(Args):
 ### diff -- Show the diff between a draft and the previous one on the IETF Tools site
 def Cmd_diff(Args):
 	if CheckHelp("diff", Args): return
+	if Args[0] == "":
+		print("Must give at least one draft name; skipping.")
+		return
 	for ThisArg in Args:
 		if ThisArg.startswith("draft-"):
 			WebDisplay("http://tools.ietf.org/rfcdiff?url2=", ThisArg)
@@ -235,6 +279,9 @@ def Cmd_diff(Args):
 ### draft -- Open drafts locally
 def Cmd_draft(Args):
 	if CheckHelp("draft", Args): return
+	if Args[0] == "":
+		print("Must give at least one draft name; skipping.")
+		return
 	if UseDraftNumbers:  # Check directory with names including draft numbers
 		TargetDir = FullIDDir
 	else:   # Check directory with short names
@@ -386,6 +433,9 @@ def Cmd_mirror(Args):
 ### rfc -- Open RFCs locally
 def Cmd_rfc(Args):
 	if CheckHelp("rfc", Args): return
+	if Args[0] == "":
+		print("Must give at least one RFC name or numnber; skipping.")
+		return
 	for ThisArg in Args:
 		# Special case: 'index' returns the rfc-index.txt file
 		if ThisArg == "index":
@@ -406,6 +456,9 @@ def Cmd_rfc(Args):
 ### tools -- Show RFCs, WGs, and drafts on the IETF Tools site
 def Cmd_tools(Args):
 	if CheckHelp("tools", Args): return
+	if Args[0] == "":
+		print("Must give at least one RFC, WG, or draft name; skipping.")
+		return
 	for ThisArg in Args:
 		# If it is just a number, check for the RFC
 		if ThisArg.isdigit():
@@ -426,6 +479,9 @@ def Cmd_tools(Args):
 ### tracker -- Show WGs and draft statuses on the Datatracker
 def Cmd_tracker(Args):
 	if CheckHelp("tracker", Args): return
+	if Args[0] == "":
+		print("Must give at least one WG or draft name; skipping.")
+		return
 	for ThisArg in Args:
 		# If there is no hypen in it, assume it is a WG
 		if ThisArg.find("-") == -1:
