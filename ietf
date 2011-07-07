@@ -16,7 +16,7 @@ from time import strftime
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.1"
+__version__ = "1.2"
 
 # Version history:
 #  1.0
@@ -24,13 +24,16 @@ __version__ = "1.1"
 #  1.1
 #    Added bcp
 #    Split out the command-calling in the CLI to make it clearer
+#  1.2
+#    Added more places to look for the config file
+#    Fixed help text for "charter" to make wildcard use clearer
 
 ##########
 # Utility functions and definitions
 ##########
 
 KnownCmds = ("bcp", "charter", "diff", "draft", "mirror", "rfc", "tools", "tracker")
-ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config")
+ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "/etc", "~/.ietf")
 WasPublishedPatt = compile(r"was\s*published")
 NewRequestPatt = compile(r"new\s*Request\s*for\s*Comments")
 HasExpiredPatt = compile(r"has\s*expired")
@@ -167,7 +170,8 @@ HelpText = {
     bcp-index.txt.''',
 	"charter": '''charter:
     Takes a list of WG names. Displays the charter for each WG using the text
-    dispay program. Wildcards are allowed in the charter names.''',
+    dispay program. Wildcards are appended to the beginning and end of the
+    charter name given, and can also be given in the name.''',
 	"diff": '''diff:
     Takes a draft name (with or without the '-nn' version number or '.txt'
     and displays the HTML diff between it and the preceding version on the
