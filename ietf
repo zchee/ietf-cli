@@ -27,12 +27,13 @@ __version__ = "1.2"
 #  1.2
 #    Added more places to look for the config file
 #    Fixed help text for "charter" to make wildcard use clearer
+#    Added auth48
 
 ##########
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("bcp", "charter", "diff", "draft", "mirror", "rfc", "tools", "tracker")
+KnownCmds = ("auth48", "bcp", "charter", "diff", "draft", "mirror", "rfc", "tools", "tracker")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "/etc", "~/.ietf")
 WasPublishedPatt = compile(r"was\s*published")
 NewRequestPatt = compile(r"new\s*Request\s*for\s*Comments")
@@ -55,15 +56,11 @@ def help_REPLTHISCMD(self):
 # Given a draft's filename, display it if it s a full draft but not otherwise
 def ShowDraft(filename):
 	ThisBaseName = basename(filename)
-	TheDiffs = glob(pathjoin(FullRFCDir, "authors", "*-diff.html"))
-	for ThisDiff in TheDiffs:
-		try:
-			InText = open(ThisDiff, "r").read()
-		except:
-			exit("Weird: could not read '" + ThisDiff + "' even though it exists. Exit.")
-		if InText.find("<strike><font color='red'>" + ThisBaseName) > -1:
-			print("This Internet-Draft is in AUTH48 state; see " + ThisDiff)
-			break
+	# See if this draft is in AUTH48
+	ThisAuth48 = FindDraftInAuth48(ThisBaseName)
+	if ThisAuth48 != "":
+		print("This Internet-Draft is in AUTH48 state; displaying " + ThisAuth48)
+		WebDisplay("file:///", pathjoin(FullRFCDir, "authors", ThisAuth48 + "diff.html"))
 	# If tombstones are to be displayed, display this file regardless
 	if DisplayTombstones:
 		system(DisplayTextCommand + filename)
@@ -99,6 +96,18 @@ def ShowDraft(filename):
 				pass # There are probably many cases where this string isn't found; ignore them
 		else:
 			system(DisplayTextCommand + filename)
+
+# Find a draft in the in-notes/authors directory, return "rfc1234" or ""
+def FindDraftInAuth48(basename):
+	TheDiffs = glob(pathjoin(FullRFCDir, "authors", "*-diff.html"))
+	for ThisDiff in TheDiffs:
+		try:
+			InText = open(ThisDiff, "r").read()
+		except:
+			exit("Weird: could not read '" + ThisDiff + "' even though it exists. Exit.")
+		if InText.find("<strike><font color='red'>" + basename) > -1:
+			return(ThisDiff.replace(pathjoin(FullRFCDir, "authors", ""), "").replace("-diff.html", ""))
+	return("")  # Only here if there was no file in AUTH48
 
 # Open a URL in the browser, but give a warning in the terminal if the command is "less"
 def WebDisplay(TheURL, TheArg):
@@ -164,6 +173,9 @@ def CheckHelp(TheCaller, InArgs):
 		return False
 
 HelpText = {
+	"auth48": '''auth48:
+    Takes a list of RFC numbers or draft names, determines if there are AUTH48
+    files associated with them, and displays the various files.''',
 	"bcp": '''bcp:
     Takes a list of BCP numbers. Displays the BCP RFCs found using the text
     dispay program. You can also give 'index' as an argument to see
@@ -223,6 +235,44 @@ HelpText["allshellcmds"] = AllShellHelp
 ##########
 # The commands themselves
 ##########
+
+### auth48 -- Open all appropriate files for a doc in AUTH48
+def Cmd_auth48(Args):
+	if CheckHelp("auth48", Args): return
+	if Args[0] == "":
+		print("Must give at least one draft name or RFC name; skipping.")
+		return
+	def ShowAuth48s(RFCfile):
+		# Incoming file is in format "rfc1234"
+		# Open the text file
+		system(DisplayTextCommand + pathjoin(FullRFCDir, "authors", RFCfile + ".txt"))
+		# Open the local diff in the browser 
+		WebDisplay("file:///", pathjoin(FullRFCDir, "authors", RFCfile + "-diff.html"))
+		# Show the status on the RFC Editor's site
+		WebDisplay("http://www.rfc-editor.org/auth48/", RFCfile)
+	for ThisArg in Args:
+		# If it is just a number, check for the RFC
+		if ThisArg.isdigit():
+			if pathexists(pathjoin(FullRFCDir, "authors", "rfc" + ThisArg + ".txt")):
+				ShowAuth48s("rfc" + ThisArg)
+			else:
+				print("You specified an all-digit argument, '" + ThisArg + "', but a corresponding RFC doesn't " \
+					+ "exist in the AUTH48 directory. Skipping.")
+		elif ((ThisArg[0:3] == "rfc") and (ThisArg[3:7].isdigit())):
+			if pathexists(pathjoin(FullRFCDir, "authors", "rfc" + ThisArg[3:7] + ".txt")):
+				ShowAuth48s("rfc" + ThisArg[3:7])
+			else:
+				print("You specified 'rfc' and some digits, but a corresponding RFC doesn't " \
+					+ "exist in the AUTH48 directory. Skipping.")
+		elif ThisArg.startswith("draft-"):
+			ThisBaseName = basename(ThisArg)
+			ThisAuth48 = FindDraftInAuth48(ThisBaseName)
+			if ThisAuth48 != "":
+				ShowAuth48s(ThisAuth48)
+			else:
+				print("You gave a draft name, but that draft doesn't have an AUTH48 RFC associated with it. Skipping.")
+		else:
+			print("Didn't recognize the argument '" + ThisArg + "'. Skipping.")
 
 ### bcp -- Open BCPs locally
 def Cmd_bcp(Args):
