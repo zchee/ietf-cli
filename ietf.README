@@ -10,6 +10,9 @@ These instructions assume that you are using a Unix-based system (including
 MacOS), and are already comfortable with the command-line interfaces of your
 shell. There are instructions for Windows users later in this document.
 
+The "ietf" program requires Python 2.6 or later; that should be available on
+almost any modern computing platform.
+
 The program consists of two files: "ietf" (the executable) and "ietf.config"
 (mandatory configuration settings). The latter file must be either in one of
 the following directories: ~/bin/, /usr/local/bin/, /etc/, or ~/.ietf/.
