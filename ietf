@@ -3,11 +3,11 @@ from __future__ import print_function
 from cmd import Cmd
 from fnmatch import filter as fnfilter
 from glob import glob
+from json import dump as jsondump, load as jsonload
 from optparse import OptionParser
 from os import chdir, environ, link, listdir, mkdir, system, unlink
 from os.path import basename, exists as pathexists, expanduser, isdir, join as pathjoin
 from pdb import set_trace as trace
-from pickle import dump as pickledump, load as pickleload
 from re import compile, search, sub
 from subprocess import Popen, PIPE
 from sys import argv, excepthook
@@ -33,17 +33,18 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Added auth48
 #  1.3
 #    Added the WTFPL license
-#    Added parsing the RFC Editor's database during mirror
-#    "rfc" now shows some information from the RFC Editor's database about what happened
-#       after an RFC was published
-#    "rfc" now opens RFCs that replace the requested RFC and the errata page for the
+#    Fixed bug that found too many drafts in in-notes/authors
+#    Added "rfcextra " which opens RFCs that replace the requested RFC and the errata page for the
 #       requested RFC if the database says there is errata
+#    Added parsing the RFC Editor's database during mirror; file is saved as a local JSON database
+#    Added "rfcstatus" which lists the status from the RFC Editor's database for RFCs
 
 ##########
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("auth48", "bcp", "charter", "diff", "draft", "mirror", "rfc", "tools", "tracker")
+KnownCmds = ("auth48", "bcp", "charter", "diff", "draft", "mirror", \
+	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "/etc", "~/.ietf")
 WasPublishedPatt = compile(r"was\s*published")
 NewRequestPatt = compile(r"new\s*Request\s*for\s*Comments")
@@ -113,11 +114,12 @@ def FindDraftInAuth48(basename):
 	TheDiffs = glob(pathjoin(FullRFCDir, "authors", "*-diff.html"))
 	for ThisDiff in TheDiffs:
 		try:
-			InText = open(ThisDiff, mode="r").read()
+			InTextLines = open(ThisDiff, mode="r").readlines()
 		except:
 			exit("Weird: could not read '" + ThisDiff + "' even though it exists. Exit.")
-		if InText.find("<strike><font color='red'>" + basename) > -1:
-			return(ThisDiff.replace(pathjoin(FullRFCDir, "authors", ""), "").replace("-diff.html", ""))
+		for InText in InTextLines[0:40]:
+			if InText.find("<strike><font color='red'>" + basename) > -1:
+				return(ThisDiff.replace(pathjoin(FullRFCDir, "authors", ""), "").replace("-diff.html", ""))
 	return("")  # Only here if there was no file in AUTH48
 
 # Open a URL in the browser, but give a warning in the terminal if the command is "less"
@@ -216,6 +218,13 @@ HelpText = {
     (AUTH48) directory. It will automatically open RFCs that obsolete and
     update the one given, and will open errata in the browser if the RFC
     Editor's database indicates that such errata exists.''',
+	"rfcextra": '''rfcextra:
+    Similar to 'rfc' but opens additional files. It will automatically open
+    RFCs that obsolete and update the one given, and will open errata in the
+    browser if the RFC Editor's database indicates that such errata exists.''',
+	"rfcstatus": '''rfcstatus:
+		Takes a list of RFC numbers and reports the status from the RFC Editor's
+		database for each one''',
 	"tools": '''tools:
     Takes a list of draft file names, RFC names, and/or WG names. Displays the
     result from the IETF Tools pages in the web dispay program. Draft names
@@ -494,9 +503,8 @@ def Cmd_mirror(Args):
 			link(pathjoin(FullIDDir, ThisDraftName), pathjoin(FullShortIDDir, ShorterName))
 		except OSError as e:
 			print("For '" + ThisDraftName + "', got error: " + str(e) + ". Skipping.")
-
-	# Make the pickled RFC status database to make rfc status searching faster
 	PrintLog("Making the RFC status index")
+	# Make the  RFC status database to make rfc status searching faster
 	TagBase = "{http://www.rfc-editor.org/rfc-index}"
 	try:
 		ParsedRFCDB = ElTree.parse(pathjoin(FullRFCDir, "rfc-index.xml"))
@@ -506,19 +514,27 @@ def Cmd_mirror(Args):
 	RFCStatus = {}
 	def StripLeadingZeros(InStr):
 		return(sub(RFCZerosPat, "\\1", InStr))
+	LookForFields = ("obsoleted-by", "updated-by", "obsoletes", "updates", "is-also")
 	for ThisTopNode in TreeRoot:
+		# Just get the RFCs, not (yet) BCPs, STDs, and so on; maybe add them later
 		if ThisTopNode.tag == TagBase + "rfc-entry":
 			ThisRFCNum = StripLeadingZeros(ThisTopNode.find(TagBase + "doc-id").text.replace("RFC", ""))
 			RFCStatus[ThisRFCNum] = {}
-			for ThisLookedFor in ("obsoleted-by", "updated-by"):
+			for ThisLookedFor in LookForFields:
+				### if ((ThisRFCNum == "2822") and (ThisLookedFor == "updated-by")): trace()
 				if ThisTopNode.findall(TagBase + ThisLookedFor):
 					RFCStatus[ThisRFCNum][ThisLookedFor] = []
-					for ThisFoundItem in ThisTopNode.findall(TagBase + ThisLookedFor):
-						RFCStatus[ThisRFCNum][ThisLookedFor].append(StripLeadingZeros(ThisFoundItem.find(TagBase + "doc-id").text.replace("RFC", "")))
-			RFCStatus[ThisRFCNum]["errata"] = True if ThisTopNode.findall(TagBase + "errata-url") else False
+					for ThisFoundOuterElement in ThisTopNode.findall(TagBase + ThisLookedFor):
+						for ThisFoundInnerElement in ThisFoundOuterElement.findall(TagBase + "doc-id"):
+							RFCStatus[ThisRFCNum][ThisLookedFor].append(StripLeadingZeros(ThisFoundInnerElement.text.replace("RFC", "")))
+			if ThisTopNode.findall(TagBase + "errata-url"):
+				RFCStatus[ThisRFCNum]["errata"] = True
+			CurrStat = ThisTopNode.find(TagBase + "current-status").text
+			if (CurrStat and CurrStat != "UNKNOWN"):
+				RFCStatus[ThisRFCNum]["current-status"] = CurrStat
 	try:
 		with open(RFCStatusFileLoc, mode="wb") as statusf:
-			pickledump(RFCStatus, statusf)
+			jsondump(RFCStatus, statusf)
 	except:
 		exit("Could not dump status info to '" + RFCStatusFileLoc + "'. Exiting.")
 
@@ -530,33 +546,13 @@ def Cmd_mirror(Args):
 def Cmd_rfc(Args):
 	if CheckHelp("rfc", Args): return
 	if Args[0] == "":
-		print("Must give at least one RFC name or numnber; skipping.")
+		print("Must give at least one RFC name or number; skipping.")
 		return
-	# Open the status database before going through the arguments
-	try:
-		with open(RFCStatusFileLoc, mode="r") as statusf:
-			RFCStatusDB = pickleload(statusf)
-	except:
-		exit("Weird: could not get data from the RFC status database, '" + RFCStatusFileLoc + "'. Exiting.")
 	for ThisArg in Args:
 		# Special case: 'index' returns the rfc-index.txt file
 		if ThisArg == "index":
 			system(DisplayTextCommand + pathjoin(FullRFCDir, "rfc-index.txt"))
 		else:
-			# Get the status of the RFC and open RFCs and errata that happened later
-			ThisRFCStatus = RFCStatusDB.get(ThisArg)
-			if ThisRFCStatus:
-				if ThisRFCStatus.get("obsoleted-by"):
-					for ThisObsoleted in ThisRFCStatus.get("obsoleted-by"):
-						print(ThisArg + " was obsoleted by " + ThisObsoleted)
-						Cmd_rfc([ThisObsoleted])
-				if ThisRFCStatus.get("updated-by"):
-					for ThisUpdated in ThisRFCStatus.get("updated-by"):
-						print(ThisArg + " was updated by " + ThisUpdated)
-						Cmd_rfc([ThisUpdated])
-				if ThisRFCStatus.get("errata") == True:
-					print(ThisArg + " has errata")
-					WebDisplay("http://www.rfc-editor.org/errata_search.php?rfc=", ThisArg)
 			RFCTests = [ ThisArg, ThisArg + ".txt", "rfc" + ThisArg, "rfc" + ThisArg + ".txt" ]
 			# Find the RFC files
 			FoundRFC = False
@@ -569,6 +565,69 @@ def Cmd_rfc(Args):
 						break
 			if FoundRFC == False:
 				print("Could not find an RFC for '" + ThisArg + "' in '" + FullRFCDir + "'; skipping.")
+
+### rfcextra -- Open RFCs locally and also open related RFCs (updates, obsoleted, errata...)
+def Cmd_rfcextra(Args):
+	if CheckHelp("rfcextra", Args): return
+	if Args[0] == "":
+		print("Must give at least one RFC name or number; skipping.")
+		return
+	# Open the status database before going through the arguments
+	try:
+		with open(RFCStatusFileLoc, mode="r") as statusf:
+			RFCStatusDB = jsonload(statusf)
+	except:
+		exit("Weird: could not get data from the RFC status database, '" + RFCStatusFileLoc + "'. Exiting.")
+	for ThisArg in Args:
+		Cmd_rfc([ThisArg])
+		# Get the status of the RFC and open RFCs and errata that happened later
+		ThisRFCStatus = RFCStatusDB.get(ThisArg)
+		# If the status exists for this RFC, display additional information
+		if ThisRFCStatus:
+			if ThisRFCStatus.get("obsoleted-by"):
+				for ThisObsoleted in ThisRFCStatus.get("obsoleted-by"):
+					print("RFC " + ThisArg + " was obsoleted by RFC " + ThisObsoleted)
+					Cmd_rfc([ThisObsoleted])
+			if ThisRFCStatus.get("updated-by"):
+				for ThisUpdated in ThisRFCStatus.get("updated-by"):
+					print("RFC " + ThisArg + " was updated by RFC " + ThisUpdated)
+					Cmd_rfc([ThisUpdated])
+			if ThisRFCStatus.get("errata") == True:
+				print("RFC " + ThisArg + " has errata")
+				WebDisplay("http://www.rfc-editor.org/errata_search.php?rfc=", ThisArg)
+
+### rfcstatus -- Show RFC status from the database without opening the file
+def Cmd_rfcstatus(Args):
+	if CheckHelp("rfcstatus", Args): return
+	if Args[0] == "":
+		print("Must give at least one RFC name or number; skipping.")
+		return
+	# Open the status database before going through the arguments
+	try:
+		with open(RFCStatusFileLoc, mode="r") as statusf:
+			RFCStatusDB = jsonload(statusf)
+	except:
+		exit("Weird: could not get data from the RFC status database, '" + RFCStatusFileLoc + "'. Exiting.")
+	for ThisArg in Args:
+		# Get the status of the RFC and open RFCs and errata that happened later
+		ThisRFCStatus = RFCStatusDB.get(ThisArg)
+		# Be sure the status exists
+		if ThisRFCStatus:
+			print("RFC " + ThisArg + ":")
+			if ThisRFCStatus.get("is-also"):
+				print("  Is also " + " ".join(ThisRFCStatus.get("is-also")))
+			if ThisRFCStatus.get("obsoleted-by"):
+				print("  Obsoleted by " + " ".join(ThisRFCStatus.get("obsoleted-by")))
+			if ThisRFCStatus.get("obsoletes"):
+				print("  Obsoletes " + " ".join(ThisRFCStatus.get("obsoletes")))
+			if ThisRFCStatus.get("updated-by"):
+				print("  Updated by " + " ".join(sorted(ThisRFCStatus.get("updated-by"))))
+			if ThisRFCStatus.get("updates"):
+				print("  Updates " + " ".join(sorted(ThisRFCStatus.get("updates"))))
+			if ThisRFCStatus.get("errata") == True:
+				print("  Has errata")
+		else:
+			print("Weird: did not find status in the database for RFC " + ThisArg + "; skipping.")
 
 ### tools -- Show RFCs, WGs, and drafts on the IETF Tools site
 def Cmd_tools(Args):
@@ -672,8 +731,8 @@ if DisplayTextCommand == "":
 if DisplayWebCommand == "":
 	DisplayWebCommand = "less "  # This is a terrible fallback, of course
 
-# Location of the RFC Status file (which could not be complete until we got the config)
-RFCStatusFileLoc = pathjoin(FullRFCDir, "ietf-rfc-status.pickle")
+# Location of the RFC JSON file (which could not be complete until we got the config)
+RFCStatusFileLoc = pathjoin(FullRFCDir, "ietf-rfc-status.json")
 
 # The "ietf" command can be called with no arguments to go to the internal command processor
 #    It is often called as "ietf" with arguments from the KnownCommand list.
