@@ -223,8 +223,8 @@ HelpText = {
     RFCs that obsolete and update the one given, and will open errata in the
     browser if the RFC Editor's database indicates that such errata exists.''',
 	"rfcstatus": '''rfcstatus:
-		Takes a list of RFC numbers and reports the status from the RFC Editor's
-		database for each one''',
+    Takes a list of RFC numbers and reports the status from the RFC Editor's
+    database for each one''',
 	"tools": '''tools:
     Takes a list of draft file names, RFC names, and/or WG names. Displays the
     result from the IETF Tools pages in the web dispay program. Draft names
@@ -242,14 +242,14 @@ for ThisHelp in sorted(HelpText.keys()):
 AllCLIHelp = AllHelp
 AllShellHelp = AllHelp
 AllCLIHelp += "You can cause tombstone drafts to be displayed in the 'draft' command by\n" \
-	+ "  giving the 'tombstones' command by itself.\n" \
+	+ "    giving the 'tombstones' command by itself.\n" \
 	+ "You can increase the number of drafts that will be opened by the 'draft'\n" \
-	+ "  command by giving the 'maxdrafts' command followed by an integer.\n" \
+	+ "    command by giving the 'maxdrafts' command followed by an integer.\n" \
 	+ "You can require that the 'draft' command only use full draft names\n" \
-	+ "  (including draft numbers and '.txt') by giving the 'usedraftnumbers'\n" \
-	+ "  command by itself.\n" \
+	+ "    (including draft numbers and '.txt') by giving the 'usedraftnumbers'\n" \
+	+ "    command by itself.\n" \
 	+ "There is also a 'shell' command to give shell commands from within\n" \
-	+ "  this processor.\n" \
+	+ "    this processor.\n" \
 	+ "Use 'q' or 'quit' or 'exit' to leave the program."
 HelpText["allclicmds"] = AllCLIHelp
 HelpText["allshellcmds"] = AllShellHelp
