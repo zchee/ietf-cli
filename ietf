@@ -36,16 +36,17 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Added parsing the RFC Editor's database during mirror; file is saved as a local JSON database
 #    Added "rfcextra " which opens RFCs that replace the requested RFC and the errata page for the
 #       requested RFC if the database says there is errata
-#    Added "rfcstatus" which lists the status from the RFC Editor's database for RFCs
-#    Added parsing the Datatracker's database during mirror; file is saved as a local JSON database
+#    Added "rfcstatus" which lists RFC status from the RFC Editor's database
+#    Added parsing the Datatracker's I-D database during mirror; file is saved as a local JSON database
+#    Added "draftstatus" which lists the I-D status from the Datatracer
 #    Fixed bug that found too many drafts in in-notes/authors
-#    Made the help text fit in 80 column windows
+#    Fixed bug so that the help text fit in 80 column windows
 
 ##########
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("auth48", "bcp", "charter", "diff", "draft", "mirror", \
+KnownCmds = ("auth48", "bcp", "charter", "diff", "draft", "draftstatus", "mirror", \
 	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "/etc", "~/.ietf")
 RFCZerosPat = compile(r'^0+(.*)')
@@ -156,10 +157,13 @@ HelpText = {
     IETF Tools page using your web display program.''',
 	"draft": '''draft:
     Takes a list of draft file names. Displays the drafts found using the text
-    dispay program. Wildcards are allowed in the draft names. There are 
+    dispay program. Substrings can be used instead of full names. There are 
     command-line options to change the way this shows tombstones (where a
     draft has expired or been replaced with an RFC). You can also give
     'abstracts' as an argument to see 1id-abstracts.txt.''',
+	"draftstatus": '''draftstatus:
+    Takes a list of draft names or substrings and reports the status from the
+    Datatracker database for each one''',
 	"mirror": '''mirror:
     Updates your local mirror of IETF directories, such as all drafts, RFCs,
     and WG charters.''',
@@ -322,29 +326,29 @@ def Cmd_draft(Args):
 		if ThisArg == "abstracts":
 			system(DisplayTextCommand + pathjoin(FullIDDir, "1id-abstracts.txt"))
 			continue
-		# Find all the drafts in the database that match this argument
-		MatchedDraftsByStatus = { "Expired": [], "RFC": [], "Replaced": [], "Active": []}
-		ThisArgWithoutTxt = sub(r'(\.txt)$', "", ThisArg)
-		StrippedThisArg = sub(r'-\d\d$', "", ThisArgWithoutTxt)
+		# Pay attention only to expired, became-an-rfc, was replaced, and active drafts
+		MatchedDraftsByStatus = { "Expired": [], "RFC": [], "Replaced": [], "Active": [] }
+		# Strip any ".txt" and "-nn" from the arugment so we can match the database
+		ShorterArg = sub(r'(\.txt)$', "", ThisArg)
+		ShorterArg = sub(r'-\d\d$', "", ShorterArg)
+		# Find all the drafts in the database that match the argument given
 		for ThisDraftFromDraftsDB in IDStatusDB.keys():
-			ThisMatch = search(".*" + StrippedThisArg + ".*", ThisDraftFromDraftsDB)
-			if ThisMatch:
-				#trace()
+			if search(".*" + ShorterArg + ".*", ThisDraftFromDraftsDB):
 				ThisStatus = IDStatusDB[ThisDraftFromDraftsDB]["status"]
 				if ThisStatus in MatchedDraftsByStatus.keys():
 					MatchedDraftsByStatus[ThisStatus].append(ThisDraftFromDraftsDB)
-		# Check the drafts found for expired, became an RFC, and replaced
-		if MatchedDraftsByStatus.get("Expired"):
+		# Report on the drafts found for expired, became an RFC, and replaced
+		if MatchedDraftsByStatus["Expired"]:
 			print("Matching drafts that have expired:")
 			for ThisExpired in sorted(MatchedDraftsByStatus["Expired"]):
-				print("  " + ThisExpired)
+				print("  " + ThisExpired + " (last revised " + IDStatusDB[ThisExpired]["last-revised"] + ")")
 			print()
-		if MatchedDraftsByStatus.get("RFC"):
+		if MatchedDraftsByStatus["RFC"]:
 			print("Matching drafts that became RFCs:")
 			for ThisBecameRFC in sorted(MatchedDraftsByStatus["RFC"]):
 				print("  " + ThisBecameRFC + " (became RFC " + IDStatusDB[ThisBecameRFC]["became-rfc"] + ")")
 			print()
-		if MatchedDraftsByStatus.get("Replaced"):
+		if MatchedDraftsByStatus["Replaced"]:
 			print("Matching drafts that were replaced:")
 			for ThisWasReplaced in sorted(MatchedDraftsByStatus["Replaced"]):
 				print("  " + ThisWasReplaced + " (replaced by " + IDStatusDB[ThisWasReplaced]["replaced-by"] + ")")
@@ -366,26 +370,76 @@ def Cmd_draft(Args):
 			continue
 		# Display the active drafts that match this argument
 		for ThisActiveDraft in sorted(MatchedDraftsByStatus["Active"]):
-			# First see if it is in Auth48
+			# If it is in Auth48, display it from that directory only
 			ThisAuth48 = FindDraftInAuth48(ThisActiveDraft)
 			if ThisAuth48 != "":
 				print("This Internet-Draft is in AUTH48 state; displaying " + ThisAuth48)
 				WebDisplay("file:///", pathjoin(FullRFCDir, "authors", ThisAuth48 + "-diff.html"))
-			# Otherwise, just display the numbered or unnumbered version, based on their preference
+				continue
+			# Display the draft from the numbered or unnumbered mirror directory, based on their preference
+			if UseDraftNumbers:
+				TargetDir = FullIDDir
 			else:
-				if UseDraftNumbers:  # Check directory with names including draft numbers
-					TargetDir = FullIDDir
-				else:   # Check directory with short names
-					TargetDir = FullShortIDDir
-				TheseNumberedDrafts = glob(pathjoin(TargetDir, ThisActiveDraft + "*"))
-				if len(TheseNumberedDrafts) == 0:
-					print("Weird: could not find a draft matching '" + ThisActiveDraft \
-						+ "' in '" + TargetDir + "'; skipping.")
-				elif len(TheseNumberedDrafts) > 1:
-					print("Weird: there was more than one draft matching '" + ThisActiveDraft \
-						+ "' in '" + TargetDir + "'; skipping.")
-				else:
-					system(DisplayTextCommand + pathjoin(TargetDir, TheseNumberedDrafts[0]))
+				TargetDir = FullShortIDDir
+			# Make sure there is only one that matches
+			TheseNumberedDrafts = glob(pathjoin(TargetDir, ThisActiveDraft + "*"))
+			if len(TheseNumberedDrafts) == 0:
+				print("Weird: could not find a draft matching '" + ThisActiveDraft \
+					+ "' in '" + TargetDir + "'; skipping.")
+			elif len(TheseNumberedDrafts) > 1:
+				print("Weird: there was more than one draft matching '" + ThisActiveDraft \
+					+ "' in '" + TargetDir + "'; skipping.")
+			else:
+				system(DisplayTextCommand + pathjoin(TargetDir, TheseNumberedDrafts[0]))
+
+### draftstatus -- Show I-D status from the database without opening the file
+def Cmd_draftstatus(Args):
+	if CheckHelp("draftstatus", Args): return
+	if Args[0] == "":
+		print("Must give at least one draft name or substring; skipping.")
+		return
+	# Open the status database before going through the arguments
+	try:
+		with open(IDStatusFileLoc, mode="r") as statusf:
+			IDStatusDB = jsonload(statusf)
+	except:
+		exit("Weird: could not get data from the ID status database, '" + IDStatusFileLoc + "'. Exiting.")
+	for ThisArg in Args:
+		FoundThisArg = False
+		# Find all drafts matching this string
+		for ThisDraftFromDraftsDB in IDStatusDB.keys():
+			if search(".*" + ThisArg + ".*", ThisDraftFromDraftsDB):
+				FoundThisArg = True
+				ThisIDStatus = IDStatusDB.get(ThisDraftFromDraftsDB)
+				print("Draft " + ThisDraftFromDraftsDB + ":\n  Status: " + ThisIDStatus["status"])
+				if ThisIDStatus.get("title"):
+					print("  Draft title: " + ThisIDStatus.get("title"))
+				if ThisIDStatus.get("authors"):
+					print("  Authors: " + ThisIDStatus.get("authors"))
+				if ThisIDStatus.get("last-revised"):
+					print("  Last revision: " + ThisIDStatus.get("last-revised"))
+				if ThisIDStatus.get("iesg-state"):
+					print("  IESG state: " + ThisIDStatus.get("iesg-state"))
+				if ThisIDStatus.get("intended-level"):
+					print("  Intended level: " + ThisIDStatus.get("intended-level"))
+				if ThisIDStatus.get("last-call-ends"):
+					print("  Last call ends: " + ThisIDStatus.get("last-call-ends"))
+				if ThisIDStatus.get("became-rfc"):
+					print("  Became RFC: " + ThisIDStatus.get("became-rfc"))
+				if ThisIDStatus.get("replaced-by"):
+					print("  Replaced by: " + ThisIDStatus.get("replaced-by"))
+				if ThisIDStatus.get("wg-name"):
+					print("  WG: " + ThisIDStatus.get("wg-name"))
+				if ThisIDStatus.get("area-name"):
+					print("  Area: " + ThisIDStatus.get("area-name"))
+				if ThisIDStatus.get("ad-name"):
+					print("  Area Director: " + ThisIDStatus.get("ad-name"))
+				if ThisIDStatus.get("file-types"):
+					# No need to show just .txt
+					if ThisIDStatus.get("file-types") != ".txt":
+						print("  File types available: " + ThisIDStatus.get("file-types"))
+		if FoundThisArg == False:
+			print("Did not find any records in the database matching " + ThisArg + "; skipping.")
 
 ### mirror -- Update the local mirror
 def Cmd_mirror(Args):
@@ -553,7 +607,7 @@ def Cmd_mirror(Args):
 			"last-call-ends": TheFields[11], \
 			"file-types": TheFields[12], \
 			"title": TheFields[13], \
-			"authors": TheFields[14] }
+			"authors": TheFields[14].rstrip() }
 	try:
 		with open(IDStatusFileLoc, mode="wb") as statusf:
 			jsondump(IDStatus, statusf)
@@ -574,19 +628,19 @@ def Cmd_rfc(Args):
 		# Special case: 'index' returns the rfc-index.txt file
 		if ThisArg == "index":
 			system(DisplayTextCommand + pathjoin(FullRFCDir, "rfc-index.txt"))
-		else:
-			RFCTests = [ ThisArg, ThisArg + ".txt", "rfc" + ThisArg, "rfc" + ThisArg + ".txt" ]
-			# Find the RFC files
-			FoundRFC = False
-			for ThisTest in RFCTests:
-				# Also check in the AUTH48 directory
-				for WhichDir in (FullRFCDir, FullRFCDir + "/authors"):
-					if pathexists(pathjoin(WhichDir, ThisTest)):
-						FoundRFC = True
-						system(DisplayTextCommand + pathjoin(WhichDir, ThisTest))
-						break
-			if FoundRFC == False:
-				print("Could not find an RFC for '" + ThisArg + "' in '" + FullRFCDir + "'; skipping.")
+			continue
+		# Look for different ways they may have specified it
+		RFCTests = [ ThisArg, ThisArg + ".txt", "rfc" + ThisArg, "rfc" + ThisArg + ".txt" ]
+		FoundRFC = False
+		for ThisTest in RFCTests:
+			# Also check in the AUTH48 directory
+			for WhichDir in (FullRFCDir, FullRFCDir + "/authors"):
+				if pathexists(pathjoin(WhichDir, ThisTest)):
+					FoundRFC = True
+					system(DisplayTextCommand + pathjoin(WhichDir, ThisTest))
+					break
+		if FoundRFC == False:
+			print("Could not find an RFC for '" + ThisArg + "' in '" + FullRFCDir + "'; skipping.")
 
 ### rfcextra -- Open RFCs locally and also open related RFCs (updates, obsoleted, errata...)
 def Cmd_rfcextra(Args):
@@ -601,10 +655,11 @@ def Cmd_rfcextra(Args):
 	except:
 		exit("Weird: could not get data from the RFC status database, '" + RFCStatusFileLoc + "'. Exiting.")
 	for ThisArg in Args:
+		# First try to open the RFC itself
 		Cmd_rfc([ThisArg])
-		# Get the status of the RFC and open RFCs and errata that happened later
+		# Then get the status of the RFC and open RFCs and errata that happened later
 		ThisRFCStatus = RFCStatusDB.get(ThisArg)
-		# If the status exists for this RFC, display additional information
+		# If the status exists for this RFC, display additional information and open what was found
 		if ThisRFCStatus:
 			if ThisRFCStatus.get("obsoleted-by"):
 				for ThisObsoleted in ThisRFCStatus.get("obsoleted-by"):
@@ -631,11 +686,13 @@ def Cmd_rfcstatus(Args):
 	except:
 		exit("Weird: could not get data from the RFC status database, '" + RFCStatusFileLoc + "'. Exiting.")
 	for ThisArg in Args:
-		# Get the status of the RFC and open RFCs and errata that happened later
-		ThisRFCStatus = RFCStatusDB.get(ThisArg)
+		# Get the status of the RFC
+		ShorterArg = sub("^rfc", "", ThisArg)
+		ShorterArg = sub(".txt%", "", ShorterArg)
+		ThisRFCStatus = RFCStatusDB.get(ShorterArg)
 		# Be sure the status exists
 		if ThisRFCStatus:
-			print("RFC " + ThisArg + ":")
+			print("RFC " + ShorterArg + ":")
 			if ThisRFCStatus.get("is-also"):
 				print("  Is also " + " ".join(ThisRFCStatus.get("is-also")))
 			if ThisRFCStatus.get("obsoleted-by"):
