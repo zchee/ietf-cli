@@ -41,6 +41,7 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Added "draftstatus" which lists the I-D status from the Datatracer
 #    Fixed bug that found too many drafts in in-notes/authors
 #    Fixed bug so that the help text fit in 80 column windows
+#    Fixed bug for finding the configuration file
 
 ##########
 # Utility functions and definitions
@@ -48,7 +49,7 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 
 KnownCmds = ("auth48", "bcp", "charter", "diff", "draft", "draftstatus", "mirror", \
 	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
-ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "/etc", "~/.ietf")
+ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "~/.ietf/ietf.config")
 RFCZerosPat = compile(r'^0+(.*)')
 
 # Make a block of text that can be executed in the CLI
@@ -586,7 +587,7 @@ def Cmd_mirror(Args):
 	# Make the I-D status database to make rfc status searching faster
 	PrintLog("Making the ID status index")
 	try:
-		AllIDStatusLines = open(FullIDDir + "/all_id2.txt", "r").readlines()
+		AllIDStatusLines = open(FullIDDir + "/all_id2.txt", mode="r").readlines()
 	except:
 		exit("Weird: could not read all_id2.txt to make the I-D status database. Exiting.")
 	IDStatus = {}

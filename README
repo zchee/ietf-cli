@@ -1,10 +1,10 @@
 =========================================================
 General Instructions
 
-The "ietf" program lets you access IETF-related files from the command line. It
-creates a local copy of these files on your computer using rsync, and gives a
-friendly way to access them. You can give commands from your normal shell, or
-you can run an interactive shell that is part of the program.
+The "ietf" program lets you access IETF-related files from the command line.
+It creates a local copy of these files on your computer using rsync, and gives
+a friendly way to access them. You can give commands from your normal shell,
+or you can run an interactive shell that is part of the program.
 
 These instructions assume that you are using a Unix-based system (including
 MacOS), and are already comfortable with the command-line interfaces of your
@@ -15,8 +15,8 @@ almost any modern computing platform.
 
 The program consists of two files: "ietf" (the executable) and "ietf.config"
 (mandatory configuration settings). The latter file must be either in one of
-the following directories: ~/bin/, /usr/local/bin/, /etc/, or ~/.ietf/.
-The executable can be anywhere, but is probably best kept with the configuration
+the following directories: ~/bin/, /usr/local/bin/, or ~/.ietf/. The
+executable can be anywhere, but is probably best kept with the configuration
 file.
 
 Make the "ietf" file executable with "chmod u+x ietf".
@@ -24,7 +24,7 @@ Make the "ietf" file executable with "chmod u+x ietf".
 You can make aliases in your shell for the program if you normally run it from
 the shell command line to save keystrokes. For example, if you use the bash
 shell, you might make an alias of:
-   alias charter='ietf alias '
+   alias charter='ietf charter '
 
 Edit the ietf.config with an editor. There is a description of the values at
 the top of that file.  It is likely you will want to change the value of
@@ -35,18 +35,18 @@ DisplayWebCommand to be the executable for your favorite web browser.
 Running the Program
 
 There are two ways to run the "ietf" program: in its own command line
-processor, or from your normal shell. For the former, just give the
-command "ietf", and you will see the "ietf: " prompt. For the latter,
-give all the arugments necessary after the "ietf" command itself. For
-example, to see the charter of the TLS Working Group:
+processor, or from your normal shell. For the former, just give the command
+"ietf", and you will see the "ietf: " prompt. For the latter, give all the
+arugments necessary after the "ietf" command itself. For example, to see the
+charter of the TLS Working Group:
 
 - In the command line processor, give the command "charter tls" at the
-"ietf: " prompt
+"ietf:" prompt
 
 - From your shell, give the command "ietf charter tls"
 
-There are many commands available; see the help text for a complete
-list and description.
+There are many commands available; see the help text for a complete list and
+description.
 
 The first run of the program, you need to fill the local mirror with the
 "mirror" command in the command line processor or "ietf mirror" from your
@@ -60,9 +60,10 @@ interfaces, both Windows-style and Unix-style.
 
 Do a standard base install of Cygwin; instructions are on the cygwin.com site.
 
-Start the Cygwin installer again, and install "python" from the Python section,
-"rsync" from the Net section,  and an editor from the Editors section ("nano"
-is a very easy one to learn if you aren't comfortable with vi or emacs).
+Start the Cygwin installer again, and install "python" from the Python
+section, "rsync" from the Net section,  and an editor from the Editors section
+("nano" is a very easy one to learn if you aren't comfortable with vi or
+emacs).
 
 Open a Windows "command" window (not the Cygwin shell). Give the command
 "\cygwin\bin\ash". "ash" prints a "$" prompt; give the command
@@ -82,4 +83,3 @@ Or, if you want to use the Windows Notepad program for viewing text files:
    DisplayTextCommand = "/cygdrive/c/Windows/System32/notepad.exe "
 
 You can now follow the directions above for running the "ietf" command.
-
