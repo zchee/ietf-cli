@@ -33,12 +33,16 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Added auth48
 #  1.3
 #    Added the WTFPL license
-#    Added parsing the RFC Editor's database during mirror; file is saved as a local JSON database
 #    Added "rfcextra " which opens RFCs that replace the requested RFC and the errata page for the
 #       requested RFC if the database says there is errata
 #    Added "rfcstatus" which lists RFC status from the RFC Editor's database
-#    Added parsing the Datatracker's I-D database during mirror; file is saved as a local JSON database
 #    Added "draftstatus" which lists the I-D status from the Datatracer
+#    Added "author" command which lists all drafts and RFCs by an author
+#    Added parsing the Datatracker's I-D database during mirror; file is saved as a local JSON database
+#    Added parsing the RFC Editor's database during mirror; file is saved as a local JSON database
+#    Added the --quiet command line option
+#    Made "tracker" also work for RFCs
+#    Made the help a bit more helpful
 #    Fixed bug that found too many drafts in in-notes/authors
 #    Fixed bug so that the help text fit in 80 column windows
 #    Fixed bug for finding the configuration file
@@ -47,7 +51,7 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("auth48", "bcp", "charter", "diff", "draft", "draftstatus", "mirror", \
+KnownCmds = ("auth48", "author", "bcp", "charter", "diff", "draft", "draftstatus", "mirror", \
 	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "~/.ietf/ietf.config")
 RFCZerosPat = compile(r'^0+(.*)')
@@ -86,7 +90,7 @@ def WebDisplay(TheURL, TheArg):
 		print("The reason that this HTML was displayed on your console is that you do not have\n" \
 			"'DisplayWebCommand' defined in the file '" + ConfigFile + "'.")
 
-# Creat a command-line processor for our commands
+# Create a command-line processor for our commands
 class OurCLI(Cmd):
 	intro = "Command line processor for ietf commands; try 'help' for more info."
 	prompt = "ietf: "
@@ -115,7 +119,7 @@ class OurCLI(Cmd):
 			CheckHelp(RestOfArgs, "__helptext__")
 		else:
 			CheckHelp("allclicmds", "__helptext__")
-	# Allow to change tombstone setting
+	# Allow to change commandline settings
 	def do_tombstones(self, RestOfArgs):
 		global DisplayTombstones
 		DisplayTombstones = True
@@ -126,7 +130,11 @@ class OurCLI(Cmd):
 		except:
 			exit("The argument to 'maxdrafts' must be a positive integer. Exiting.")
 	def do_usedraftnumbers(self, RestOfArgs):
+		global UseDraftNumbers
 		UseDraftNumbers = True
+	def do_quiet(self, RestOfArgs):
+		global QuietDraft
+		QuietDraft = True
 
 # Print help text if this is called with no args or with a single arg of "__helptext__"
 #   All commands other than "mirror" need args.
@@ -197,18 +205,29 @@ HelpText = {
 AllHelp = "Command-line interface for displaying IETF-related information. Commands are:\n"
 for ThisHelp in sorted(HelpText.keys()):
 	AllHelp += " " + HelpText[ThisHelp] + "\n"
-AllCLIHelp = AllHelp
-AllShellHelp = AllHelp
-AllCLIHelp += "You can cause tombstone drafts to be displayed in the 'draft' command by\n" \
-	+ "    giving the 'tombstones' command by itself.\n" \
+ArgsCLIHelp = "You can cause tombstone drafts to be displayed in the 'draft' command\n" \
+	+ "    by giving the 'tombstones' command by itself.\n" \
 	+ "You can increase the number of drafts that will be opened by the 'draft'\n" \
 	+ "    command by giving the 'maxdrafts' command followed by an integer.\n" \
 	+ "You can require that the 'draft' command only use full draft names\n" \
 	+ "    (including draft numbers and '.txt') by giving the 'usedraftnumbers'\n" \
 	+ "    command by itself.\n" \
+	+ "You can make the 'draft' command not tell you about tombstones by giving\n" \
+	+ "    the 'quiet' command by itself.\n" 
+AllCLIHelp = AllHelp + ArgsCLIHelp \
 	+ "There is also a 'shell' command to give shell commands from within\n" \
 	+ "    this processor.\n" \
 	+ "Use 'q' or 'quit' or 'exit' to leave the program."
+ArgsShellHelp = "You can cause tombstone drafts to be displayed in the 'draft' command\n" \
+	+ "    with the --tombstones argument.\n" \
+	+ "You can increase the number of drafts that will be opened by the 'draft'\n" \
+	+ "    command with the --maxdrafts= argument followed by an integer.\n" \
+	+ "You can require that the 'draft' command only use full draft names\n" \
+	+ "    (including draft numbers and '.txt') with the --usedraftnumbers'\n" \
+	+ "    argument.\n" \
+	+ "You can make the 'draft' command not tell you about tombstones with the\n" \
+	+ "    --quiet argument.\n" 
+AllShellHelp = AllHelp + ArgsShellHelp
 HelpText["allclicmds"] = AllCLIHelp
 HelpText["allshellcmds"] = AllShellHelp
 
@@ -254,6 +273,41 @@ def Cmd_auth48(Args):
 		else:
 			print("Didn't recognize the argument '" + ThisArg + "'. Skipping.")
 
+### author -- Search for drafts and RFCs with a particular author
+def Cmd_author(Args):
+	if CheckHelp("author", Args): return
+	if Args[0] == "":
+		print("Must give at least one string to search for; skipping.")
+		return
+	# Get the drafts status and RFC status databases
+	try:
+		with open(IDStatusFileLoc, mode="r") as statusf:
+			IDStatusDB = jsonload(statusf)
+	except:
+		exit("Weird: could not get data from the ID status database, '" + IDStatusFileLoc + "'. Exiting.")
+	try:
+		with open(RFCStatusFileLoc, mode="r") as statusf:
+			RFCStatusDB = jsonload(statusf)
+	except:
+		exit("Weird: could not get data from the RFC status database, '" + RFCStatusFileLoc + "'. Exiting.")
+	for ThisArg in Args:
+		FoundRFCs = []
+		FoundIDs = []
+		for ThisRFC in sorted(RFCStatusDB.keys()):
+			if search(".*" + ThisArg + ".*", str(RFCStatusDB[ThisRFC]["authors"])):
+				FoundRFCs.append(ThisRFC)
+		if FoundRFCs:
+			print("Found '" + ThisArg + "' as author in RFCs:")
+			for ThisFoundRFC in FoundRFCs:
+				print("  RFC " + ThisFoundRFC + "  " + RFCStatusDB[ThisFoundRFC]["title"])
+		for ThisID in sorted(IDStatusDB.keys()):
+			if search(".*" + ThisArg + ".*", repr(IDStatusDB[ThisID]["authors"])):
+				FoundIDs.append(ThisID)
+		if FoundIDs:
+			print("Found '" + ThisArg + "' as author in IDs:")
+			for ThisFoundID in FoundIDs:
+				print("  " + ThisFoundID + "  " + IDStatusDB[ThisFoundID]["title"])
+			
 ### bcp -- Open BCPs locally
 def Cmd_bcp(Args):
 	if CheckHelp("bcp", Args): return
@@ -339,21 +393,22 @@ def Cmd_draft(Args):
 				if ThisStatus in MatchedDraftsByStatus.keys():
 					MatchedDraftsByStatus[ThisStatus].append(ThisDraftFromDraftsDB)
 		# Report on the drafts found for expired, became an RFC, and replaced
-		if MatchedDraftsByStatus["Expired"]:
-			print("Matching drafts that have expired:")
-			for ThisExpired in sorted(MatchedDraftsByStatus["Expired"]):
-				print("  " + ThisExpired + " (last revised " + IDStatusDB[ThisExpired]["last-revised"] + ")")
-			print()
-		if MatchedDraftsByStatus["RFC"]:
-			print("Matching drafts that became RFCs:")
-			for ThisBecameRFC in sorted(MatchedDraftsByStatus["RFC"]):
-				print("  " + ThisBecameRFC + " (became RFC " + IDStatusDB[ThisBecameRFC]["became-rfc"] + ")")
-			print()
-		if MatchedDraftsByStatus["Replaced"]:
-			print("Matching drafts that were replaced:")
-			for ThisWasReplaced in sorted(MatchedDraftsByStatus["Replaced"]):
-				print("  " + ThisWasReplaced + " (replaced by " + IDStatusDB[ThisWasReplaced]["replaced-by"] + ")")
-			print()
+		if not(QuietDraft):
+			if MatchedDraftsByStatus["Expired"]:
+				print("Matching drafts that have expired:")
+				for ThisExpired in sorted(MatchedDraftsByStatus["Expired"]):
+					print("  " + ThisExpired + " (last revised " + IDStatusDB[ThisExpired]["last-revised"] + ")")
+				print()
+			if MatchedDraftsByStatus["RFC"]:
+				print("Matching drafts that became RFCs:")
+				for ThisBecameRFC in sorted(MatchedDraftsByStatus["RFC"]):
+					print("  " + ThisBecameRFC + " (became RFC " + IDStatusDB[ThisBecameRFC]["became-rfc"] + ")")
+				print()
+			if MatchedDraftsByStatus["Replaced"]:
+				print("Matching drafts that were replaced:")
+				for ThisWasReplaced in sorted(MatchedDraftsByStatus["Replaced"]):
+					print("  " + ThisWasReplaced + " (replaced by " + IDStatusDB[ThisWasReplaced]["replaced-by"] + ")")
+				print()
 		# If there are no active drafts that match this argument, say something and go to the next argument
 		if not(MatchedDraftsByStatus.get("Active")):
 			print("No active drafts matched the substring '" + ThisArg + "'.")
@@ -575,9 +630,16 @@ def Cmd_mirror(Args):
 							RFCStatus[ThisRFCNum][ThisLookedFor].append(StripLeadingZeros(ThisFoundInnerElement.text.replace("RFC", "")))
 			if ThisTopNode.findall(TagBase + "errata-url"):
 				RFCStatus[ThisRFCNum]["errata"] = True
+			ThisTitle = ThisTopNode.find(TagBase + "title").text
+			if ThisTitle:
+				RFCStatus[ThisRFCNum]["title"] = ThisTitle
 			CurrStat = ThisTopNode.find(TagBase + "current-status").text
 			if (CurrStat and CurrStat != "UNKNOWN"):
 				RFCStatus[ThisRFCNum]["current-status"] = CurrStat
+			RFCStatus[ThisRFCNum]["authors"] = []
+			for ThisFoundOuterAuthor in ThisTopNode.findall(TagBase + "author"):
+				for ThisFoundInnerAuthor in ThisFoundOuterAuthor.findall(TagBase + "name"):
+					RFCStatus[ThisRFCNum]["authors"].append(ThisFoundInnerAuthor.text)
 	try:
 		with open(RFCStatusFileLoc, mode="wb") as statusf:
 			jsondump(RFCStatus, statusf)
@@ -739,8 +801,14 @@ def Cmd_tracker(Args):
 		print("Must give at least one WG or draft name; skipping.")
 		return
 	for ThisArg in Args:
-		# If there is no hypen in it, assume it is a WG
-		if ThisArg.find("-") == -1:
+		# If it is just a number, check for the RFC
+		if ThisArg.isdigit():
+			WebDisplay("https://datatracker.ietf.org/doc/rfc", ThisArg)
+		# If it starts with "rfc" and rest are digits, it is also an RFC
+		elif (ThisArg.startswith("rfc") and  ThisArg[3:].isdigit()):
+			WebDisplay("https://datatracker.ietf.org/doc/", ThisArg)
+		# If it isn't an RFC and it has no hyphens, assume it is a WG
+		elif ThisArg.find("-") == -1:
 			WebDisplay("https://datatracker.ietf.org/wg/", ThisArg)
 		# If not, assume it is a draft
 		elif ThisArg.startswith("draft-"):  # This might get a 404
@@ -765,6 +833,8 @@ Parse.add_option("--tombstones", action="store_true", dest="DisplayTombstones", 
 Parse.add_option("--maxdrafts", action="store", type="int", dest="MaxDrafts", default=10)
 # Only open drafts from directory with full draft names (including version numbers)
 Parse.add_option("--usedraftnumbers", action="store_true", dest="UseDraftNumbers", default=False)
+# Normally have the "draft" and "rfc" commands be verbose
+Parse.add_option("--quiet", action="store_true", dest="QuietDraft", default=False)
 # Set up the help
 Parse.add_option("--help", "-h", action="callback", callback=ShowCommandLineHelp)
 (Opts, RestOfArgs) = Parse.parse_args()
@@ -772,6 +842,7 @@ Parse.add_option("--help", "-h", action="callback", callback=ShowCommandLineHelp
 DisplayTombstones = Opts.DisplayTombstones
 MaxDrafts = Opts.MaxDrafts
 UseDraftNumbers = Opts.UseDraftNumbers
+QuietDraft = Opts.QuietDraft
 
 ConfigFile = ""
 for ThisPlace in ConfigPlaces:
