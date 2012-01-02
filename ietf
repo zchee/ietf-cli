@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.3"
+__version__ = "1.4"
 __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -46,12 +46,14 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Fixed bug that found too many drafts in in-notes/authors
 #    Fixed bug so that the help text fit in 80 column windows
 #    Fixed bug for finding the configuration file
+#  1.4
+#    Added "iesg docs" and "iesg agenda"
 
 ##########
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("auth48", "author", "bcp", "charter", "diff", "draft", "draftstatus", "mirror", \
+KnownCmds = ("auth48", "author", "bcp", "charter", "diff", "draft", "draftstatus", "iesg", "mirror", \
 	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "~/.ietf/ietf.config")
 RFCZerosPat = compile(r'^0+(.*)')
@@ -173,6 +175,10 @@ HelpText = {
 	"draftstatus": '''draftstatus:
     Takes a list of draft names or substrings and reports the status from the
     Datatracker database for each one''',
+  "iesg": '''iesg:
+    Displays the next agenda (when given the "agenda" argument") or the list
+    of documents under consideration (when given the "docs" argument) in the
+    web display program''',
 	"mirror": '''mirror:
     Updates your local mirror of IETF directories, such as all drafts, RFCs,
     and WG charters.''',
@@ -202,7 +208,8 @@ HelpText = {
     result from the IETF Datatracker pages in the web dispay program. Draft
     names and WG names are matched exactly.''',
 }
-AllHelp = "Command-line interface for displaying IETF-related information. Commands are:\n"
+AllHelp = "Command-line interface for displaying IETF-related information. Version " \
+	+ __version__ + ".\nCommands are:\n"
 for ThisHelp in sorted(HelpText.keys()):
 	AllHelp += " " + HelpText[ThisHelp] + "\n"
 ArgsCLIHelp = "You can cause tombstone drafts to be displayed in the 'draft' command\n" \
@@ -496,6 +503,19 @@ def Cmd_draftstatus(Args):
 						print("  File types available: " + ThisIDStatus.get("file-types"))
 		if FoundThisArg == False:
 			print("Did not find any records in the database matching " + ThisArg + "; skipping.")
+
+### iesg -- Show IESG pages on the Datatracker
+def Cmd_iesg(Args):
+	if CheckHelp("iesg", Args): return
+	if Args[0] == "":
+		print("Must give at least one of 'agenda' or 'docs' as an argument; skipping.")
+		return
+	for ThisArg in Args:
+		# If it is just a number, check for the RFC
+		if ThisArg.lower() == "agenda":
+			WebDisplay("https://datatracker.ietf.org/iesg/agenda", "")
+		if ThisArg.lower() == "docs":
+			WebDisplay("https://datatracker.ietf.org/iesg/agenda/documents", "")
 
 ### mirror -- Update the local mirror
 def Cmd_mirror(Args):
