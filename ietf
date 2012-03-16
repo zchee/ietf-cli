@@ -48,6 +48,7 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Fixed bug for finding the configuration file
 #  1.4
 #    Added "iesg docs" and "iesg agenda"
+#    Fixed bug with displaying multiple drafts that have the same name beginnings
 
 ##########
 # Utility functions and definitions
@@ -449,11 +450,9 @@ def Cmd_draft(Args):
 			if len(TheseNumberedDrafts) == 0:
 				print("Weird: could not find a draft matching '" + ThisActiveDraft \
 					+ "' in '" + TargetDir + "'; skipping.")
-			elif len(TheseNumberedDrafts) > 1:
-				print("Weird: there was more than one draft matching '" + ThisActiveDraft \
-					+ "' in '" + TargetDir + "'; skipping.")
 			else:
-				system(DisplayTextCommand + pathjoin(TargetDir, TheseNumberedDrafts[0]))
+				for ThisToDisplay in TheseNumberedDrafts:
+					system(DisplayTextCommand + pathjoin(TargetDir, ThisToDisplay))
 
 ### draftstatus -- Show I-D status from the database without opening the file
 def Cmd_draftstatus(Args):
