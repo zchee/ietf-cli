@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.4"
+__version__ = "1.5"
 __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -49,7 +49,8 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #  1.4
 #    Added "iesg docs" and "iesg agenda"
 #    Fixed bug with displaying multiple drafts that have the same name beginnings
-#	   Made changes to get new charters
+#  1.5
+#	   Made changes to get new-style charters with "charter-new"
 
 ##########
 # Utility functions and definitions
@@ -163,12 +164,14 @@ HelpText = {
 	"charter": '''charter:
     Takes a list of WG names. Displays the charter for each WG using the text
     dispay program. Wildcards are appended to the beginning and end of the
-    charter name given, and can also be given in the name.''',
+    charter name given, and can also be given in the name. The charters are
+    gotten from the old-style charters in the "ietf" directory.''',
 	"charternew": '''charternew:
     Takes a list of WG names. Displays the charter for each WG using the text
     dispay program. Wildcards are appended to the beginning and end of the
-    charter name given, and can also be given in the name. Information for
-    this command comes from the IETF charter directory created in July 2012.''',
+    charter name given, and can also be given in the name. The charters are
+    gotten from the new-style charters in the "charter" directory, which was
+    begun in June 2012.''',
 	"diff": '''diff:
     Takes a draft name (with or without the '-nn' version number or '.txt'
     and displays the HTML diff between it and the preceding version on the
@@ -340,7 +343,7 @@ def Cmd_bcp(Args):
 				else:
 					print("Could not find the BCP " + ThisBCPNum + " as '" + ThisBCPFile + "'; skipping.")
 
-### charter -- Open charter files locally
+### charter -- Open older-style charter files locally
 def Cmd_charter(Args):
 	if CheckHelp("charter", Args): return
 	if Args[0] == "":
@@ -366,7 +369,7 @@ def Cmd_charter(Args):
 						print("Found the WG directory for '" + ThisWG + "',\n" \
 							+ "but did not find the expected charter in that directory. Skipping.")
 
-### charternew -- Open charter files locally
+### charternew -- Open 2012-style charter files locally
 def Cmd_charternew(Args):
 	if CheckHelp("charternew", Args): return
 	if Args[0] == "":
@@ -374,15 +377,19 @@ def Cmd_charternew(Args):
 		return
 	# Get this list once to optimize if there are many WGs to look up
 	try:
-		chdir(CharterDir)
-	else:
+		chdir(expanduser(CharterDir))
+	except:
 		exit("Weird: could not chdir to " + CharterDir)
-	AllCharterFiles = glob(pathjoin(CharterDir, "charter-ietf-*")
-	AllWGsInIETF = []
-	for ThisCharterFile in glob("charter-ietf-*")
-	#################### Add logic that finds the last for any given WG name
+	AllCharterFiles = glob(pathjoin(CharterDir, "charter-ietf-*"))
+	AllWGsInIETF = {}
+	for ThisCharterFile in sorted(glob("charter-ietf-*")):
+		CharterParts = (ThisCharterFile[13:-4]).split("-")
+		# There's always a special case for the Security Area <grumble>
+		if CharterParts[0:2] == ["krb", "wg"]:
+			CharterParts = [ "krb-wg", CharterParts[2:] ]
+		AllWGsInIETF[CharterParts[0]] = ThisCharterFile
 	for ThisArg in Args:
-		MatchingWGs = fnfilter(AllWGsInIETF, "*" + ThisArg + "*")
+		MatchingWGs = fnfilter(sorted(AllWGsInIETF.keys()), "*" + ThisArg + "*")
 		if len(MatchingWGs) > 10:
 			AllMatched = ", ".join(MatchingWGs)
 			print("More than 10 WGs match '*" + ThisArg + "*' in the IETF directory. Skipping.\n" + AllMatched)
@@ -390,14 +397,12 @@ def Cmd_charternew(Args):
 			print("Did not find the WG that matches '*" + ThisArg + "*' in the IETF directory. Skipping.")
 		else:
 			for ThisWG in MatchingWGs:
-				WGDir = pathjoin(FullIETFDir, ThisWG)
-				if pathexists(WGDir):
-					CharterTextFile = pathjoin(WGDir, ThisWG + "-charter.txt")
-					if pathexists(CharterTextFile):
-						system(DisplayTextCommand + CharterTextFile)
-					else:
-						print("Found the WG directory for '" + ThisWG + "',\n" \
-							+ "but did not find the expected charter in that directory. Skipping.")
+				CharterTextFile = pathjoin(expanduser(CharterDir), AllWGsInIETF[ThisWG])
+				if pathexists(CharterTextFile):
+					system(DisplayTextCommand + CharterTextFile)
+				else:
+					print("Weird: when looking for the charter file for " + ThisWG + ", I should have found " \
+						+ CharterTextFile + ", but didn't. Skipping.")
 
 ### diff -- Show the diff between a draft and the previous one on the IETF Tools site
 def Cmd_diff(Args):
