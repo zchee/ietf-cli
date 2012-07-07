@@ -49,12 +49,13 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #  1.4
 #    Added "iesg docs" and "iesg agenda"
 #    Fixed bug with displaying multiple drafts that have the same name beginnings
+#	   Made changes to get new charters
 
 ##########
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("auth48", "author", "bcp", "charter", "diff", "draft", "draftstatus", "iesg", "mirror", \
+KnownCmds = ("auth48", "author", "bcp", "charter", "charternew", "diff", "draft", "draftstatus", "iesg", "mirror", \
 	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "~/.ietf/ietf.config")
 RFCZerosPat = compile(r'^0+(.*)')
@@ -163,6 +164,11 @@ HelpText = {
     Takes a list of WG names. Displays the charter for each WG using the text
     dispay program. Wildcards are appended to the beginning and end of the
     charter name given, and can also be given in the name.''',
+	"charternew": '''charternew:
+    Takes a list of WG names. Displays the charter for each WG using the text
+    dispay program. Wildcards are appended to the beginning and end of the
+    charter name given, and can also be given in the name. Information for
+    this command comes from the IETF charter directory created in July 2012.''',
 	"diff": '''diff:
     Takes a draft name (with or without the '-nn' version number or '.txt'
     and displays the HTML diff between it and the preceding version on the
@@ -344,6 +350,39 @@ def Cmd_charter(Args):
 	AllDirsInIETF = listdir(FullIETFDir)
 	for ThisArg in Args:
 		MatchingWGs = fnfilter(AllDirsInIETF, "*" + ThisArg + "*")
+		if len(MatchingWGs) > 10:
+			AllMatched = ", ".join(MatchingWGs)
+			print("More than 10 WGs match '*" + ThisArg + "*' in the IETF directory. Skipping.\n" + AllMatched)
+		elif len(MatchingWGs) == 0:
+			print("Did not find the WG that matches '*" + ThisArg + "*' in the IETF directory. Skipping.")
+		else:
+			for ThisWG in MatchingWGs:
+				WGDir = pathjoin(FullIETFDir, ThisWG)
+				if pathexists(WGDir):
+					CharterTextFile = pathjoin(WGDir, ThisWG + "-charter.txt")
+					if pathexists(CharterTextFile):
+						system(DisplayTextCommand + CharterTextFile)
+					else:
+						print("Found the WG directory for '" + ThisWG + "',\n" \
+							+ "but did not find the expected charter in that directory. Skipping.")
+
+### charternew -- Open charter files locally
+def Cmd_charternew(Args):
+	if CheckHelp("charternew", Args): return
+	if Args[0] == "":
+		print("Must give at least one WG name; skipping.")
+		return
+	# Get this list once to optimize if there are many WGs to look up
+	try:
+		chdir(CharterDir)
+	else:
+		exit("Weird: could not chdir to " + CharterDir)
+	AllCharterFiles = glob(pathjoin(CharterDir, "charter-ietf-*")
+	AllWGsInIETF = []
+	for ThisCharterFile in glob("charter-ietf-*")
+	#################### Add logic that finds the last for any given WG name
+	for ThisArg in Args:
+		MatchingWGs = fnfilter(AllWGsInIETF, "*" + ThisArg + "*")
 		if len(MatchingWGs) > 10:
 			AllMatched = ", ".join(MatchingWGs)
 			print("More than 10 WGs match '*" + ThisArg + "*' in the IETF directory. Skipping.\n" + AllMatched)
@@ -554,6 +593,7 @@ def Cmd_mirror(Args):
 			[ "IESG", "rsync -avz --delete-after  www.ietf.org::everything-ftp/iesg/ " + IESGDir ],
 			[ "IETF", "rsync -avz --delete-after  --exclude='ipr/' " +
 				"www.ietf.org::everything-ftp/ietf/ " + IETFDir ],
+			[ "charters", "rsync -avz --delete-after  www.ietf.org::everything-ftp/charter/ " + CharterDir ],
 			[ "RFCs", "rsync -avz --delete-after " +
 				" --exclude='tar*' --exclude='search*' --exclude='PDF-RFC*' " +
 				" --exclude='tst/' --exclude='pdfrfc/' --exclude='internet-drafts/' " +
