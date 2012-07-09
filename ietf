@@ -926,7 +926,7 @@ try:
 except:
 	exit("Failed during exec of " + ConfigFile + ". Exiting.")
 
-# All the varialbes from the config file must be defined, and the named directories must exist.
+# All the variables from the config file must be defined, and the named directories must exist.
 TheDirectories = ( "MirrorDir", "IDDir", "ShortIDDir", "IANADir", "IESGDir", "IETFDir", "RFCDir" )
 for ThisDir in TheDirectories:
 	if not ThisDir in dir():
