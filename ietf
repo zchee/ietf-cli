@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.5"
+__version__ = "1.6"
 __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -51,6 +51,8 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Fixed bug with displaying multiple drafts that have the same name beginnings
 #  1.5
 #	   Made changes to get new-style charters with "charter-new"
+#  1.6
+#    XXXXXXXXXXX
 
 ##########
 # Utility functions and definitions
