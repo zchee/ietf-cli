@@ -371,25 +371,30 @@ def Cmd_charter(Args):
 						print("Found the WG directory for '" + ThisWG + "',\n" \
 							+ "but did not find the expected charter in that directory. Skipping.")
 
-### charternew -- Open 2012-style charter files locally
-def Cmd_charternew(Args):
-	if CheckHelp("charternew", Args): return
-	if Args[0] == "":
-		print("Must give at least one WG name; skipping.")
-		return
+### FillAllWGsInIETF -- Helper function for speeding up lookup of new-style charters
+def FillAllWGsInIETF():
 	# Get this list once to optimize if there are many WGs to look up
 	try:
 		chdir(expanduser(CharterDir))
 	except:
 		exit("Weird: could not chdir to " + CharterDir)
-	AllCharterFiles = glob(pathjoin(CharterDir, "charter-ietf-*"))
+	global AllWGsInIETF
 	AllWGsInIETF = {}
+	AllCharterFiles = glob(pathjoin(CharterDir, "charter-ietf-*"))
 	for ThisCharterFile in sorted(glob("charter-ietf-*")):
 		CharterParts = (ThisCharterFile[13:-4]).split("-")
 		# There's always a special case for the Security Area <grumble>
 		if CharterParts[0:2] == ["krb", "wg"]:
 			CharterParts = [ "krb-wg", CharterParts[2:] ]
 		AllWGsInIETF[CharterParts[0]] = ThisCharterFile
+
+### charternew -- Open 2012-style charter files locally
+def Cmd_charternew(Args):
+	if CheckHelp("charternew", Args): return
+	if Args[0] == "":
+		print("Must give at least one WG name; skipping.")
+		return
+	FillAllWGsInIETF()
 	for ThisArg in Args:
 		MatchingWGs = fnfilter(sorted(AllWGsInIETF.keys()), "*" + ThisArg + "*")
 		if len(MatchingWGs) > 10:
