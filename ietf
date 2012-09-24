@@ -52,7 +52,7 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #  1.5
 #	   Made changes to get new-style charters with "charter-new"
 #  1.6
-#    XXXXXXXXXXX
+#    Added "charternew"
 
 ##########
 # Utility functions and definitions
