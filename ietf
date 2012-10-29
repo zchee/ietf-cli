@@ -53,12 +53,13 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #	   Made changes to get new-style charters with "charter-new"
 #  1.6
 #    Added "charternew"
+#    Added "conflict"
 
 ##########
 # Utility functions and definitions
 ##########
 
-KnownCmds = ("auth48", "author", "bcp", "charter", "charternew", "diff", "draft", "draftstatus", "iesg", "mirror", \
+KnownCmds = ("auth48", "author", "bcp", "charter", "charternew", "conflict", "diff", "draft", "draftstatus", "iesg", "mirror", \
 	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "~/.ietf/ietf.config")
 RFCZerosPat = compile(r'^0+(.*)')
@@ -174,6 +175,9 @@ HelpText = {
     charter name given, and can also be given in the name. The charters are
     gotten from the new-style charters in the "charter" directory, which was
     begun in June 2012.''',
+  "conflict": '''conflict:
+    Takes a draft name (with or without the '-nn' version number or '.txt''
+    and displays the HTML conflict review, if it exists.''',
 	"diff": '''diff:
     Takes a draft name (with or without the '-nn' version number or '.txt'
     and displays the HTML diff between it and the preceding version on the
@@ -410,6 +414,23 @@ def Cmd_charternew(Args):
 				else:
 					print("Weird: when looking for the charter file for " + ThisWG + ", I should have found " \
 						+ CharterTextFile + ", but didn't. Skipping.")
+
+### conflict -- Show the conflict review for a draft 
+def Cmd_conflict(Args):
+	if CheckHelp("conflict", Args): return
+	if Args[0] == "":
+		print("Must give at least one draft name; skipping.")
+		return
+	for ThisArg in Args:
+		if ThisArg.startswith("draft-"):
+			# Strip any ".txt" and "-nn" from the arugment so we can match the database
+			ShorterArg = sub(r'(\.txt)$', "", ThisArg)
+			ShorterArg = sub(r'-\d\d$', "", ShorterArg)
+			# Remove "draft-" from the beginning
+			ShorterArg = ShorterArg[6:]
+			WebDisplay("https://datatracker.ietf.org/doc/conflict-review-", ShorterArg)
+		else:
+			print("The argument to this command must begin with 'draft-'.\n")
 
 ### diff -- Show the diff between a draft and the previous one on the IETF Tools site
 def Cmd_diff(Args):
