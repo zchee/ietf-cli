@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.7"
+__version__ = "1.8"
 __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -56,6 +56,9 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Added "conflict"
 #  1.7
 #    Got rid of "charter" because new WGs don't work with old charter
+#  1.8
+#    Added .encode('utf-8') to author and AD names in draftstatus because those might be UTF-8
+#       Clearly, this needs to be dealt with better in a future version
 
 ##########
 # Utility functions and definitions
@@ -521,7 +524,7 @@ def Cmd_draftstatus(Args):
 				if ThisIDStatus.get("title"):
 					print("  Draft title: " + ThisIDStatus.get("title"))
 				if ThisIDStatus.get("authors"):
-					print("  Authors: " + ThisIDStatus.get("authors"))
+					print("  Authors: " + ThisIDStatus.get("authors").encode('utf-8'))
 				if ThisIDStatus.get("last-revised"):
 					print("  Last revision: " + ThisIDStatus.get("last-revised"))
 				if ThisIDStatus.get("iesg-state"):
@@ -539,7 +542,7 @@ def Cmd_draftstatus(Args):
 				if ThisIDStatus.get("area-name"):
 					print("  Area: " + ThisIDStatus.get("area-name"))
 				if ThisIDStatus.get("ad-name"):
-					print("  Area Director: " + ThisIDStatus.get("ad-name"))
+					print("  Area Director: " + ThisIDStatus.get("ad-name").encode('utf-8'))
 				if ThisIDStatus.get("file-types"):
 					# No need to show just .txt
 					if ThisIDStatus.get("file-types") != ".txt":
