@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.8"
+__version__ = "1.9"
 __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -59,13 +59,15 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #  1.8
 #    Added .encode('utf-8') to author and AD names in draftstatus because those might be UTF-8
 #       Clearly, this needs to be dealt with better in a future version
+#  1.9
+#    Added "rfcinfo", and changed "tools" to only go to the tools.ietf.org site
 
 ##########
 # Utility functions and definitions
 ##########
 
 KnownCmds = ("auth48", "author", "bcp", "charter", "conflict", "diff", "draft", "draftstatus", "iesg", "mirror", \
-	"rfc", "rfcextra", "rfcstatus", "tools", "tracker", "foo")
+	"rfc", "rfcextra", "rfcinfo", "rfcstatus", "tools", "tracker", "foo")
 ConfigPlaces = ("~/bin/ietf.config", "/usr/local/bin/ietf.config", "~/.ietf/ietf.config")
 RFCZerosPat = compile(r'^0+(.*)')
 
@@ -210,6 +212,9 @@ HelpText = {
     Similar to 'rfc' but opens additional files. It will automatically open
     RFCs that obsolete and update the one given, and will open errata in the
     browser if the RFC Editor's database indicates that such errata exists.''',
+	"rfcinfo": '''rfcinfo:
+    Takes a list of RFC numbers and opens the info pages from the RFC Editor's
+    web site''',
 	"rfcstatus": '''rfcstatus:
     Takes a list of RFC numbers and reports the status from the RFC Editor's
     database for each one''',
@@ -803,6 +808,22 @@ def Cmd_rfcextra(Args):
 				print("RFC " + ThisArg + " has errata")
 				WebDisplay("http://www.rfc-editor.org/errata_search.php?rfc=", ThisArg)
 
+### rfcinfo -- Show RFC information on the RFC Editor site
+def Cmd_rfcinfo(Args):
+	if CheckHelp("rfcinfo", Args): return
+	if Args[0] == "":
+		print("Must give at least one RFC number; skipping.")
+		return
+	for ThisArg in Args:
+		# If it is just a number, check for the RFC
+		if ThisArg.isdigit():
+			WebDisplay("http://www.rfc-editor.org/info/rfc", ThisArg)
+		# If it starts with "rfc" and rest are digits, it is also an RFC
+		elif (ThisArg.startswith("rfc") and  ThisArg[3:].isdigit()):
+			WebDisplay("http://www.rfc-editor.org/info/", ThisArg)
+		else:
+			print("This command is for finding RFCs on the RFC Editor's site web site.\n")
+
 ### rfcstatus -- Show RFC status from the database without opening the file
 def Cmd_rfcstatus(Args):
 	if CheckHelp("rfcstatus", Args): return
@@ -847,10 +868,10 @@ def Cmd_tools(Args):
 	for ThisArg in Args:
 		# If it is just a number, check for the RFC
 		if ThisArg.isdigit():
-			WebDisplay("http://www.rfc-editor.org/info/rfc", ThisArg)
+			WebDisplay("http://tools.ietf.org/html/rfc", ThisArg)
 		# If it starts with "rfc" and rest are digits, it is also an RFC
 		elif (ThisArg.startswith("rfc") and  ThisArg[3:].isdigit()):
-			WebDisplay("http://www.rfc-editor.org/info/", ThisArg)
+			WebDisplay("http://tools.ietf.org/html/", ThisArg)
 		# If it isn't an RFC and it has no hyphens, assume it is a WG
 		elif ThisArg.find("-") == -1:
 			WebDisplay("http://tools.ietf.org/wg/", ThisArg)
