@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.9"
+__version__ = "1.10"
 __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -61,6 +61,8 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #       Clearly, this needs to be dealt with better in a future version
 #  1.9
 #    Added "rfcinfo", and changed "tools" to only go to the tools.ietf.org site
+#  1.10
+#    Changed the rsync targets from www.ietf.org to ietf.org
 
 ##########
 # Utility functions and definitions
@@ -601,12 +603,12 @@ def Cmd_mirror(Args):
 	else:
 		AllActions = [
 			[ "Internet Drafts", "rsync -avz --exclude='*.xml' --exclude='*.pdf' --exclude='*.p7s' " +
-				" --exclude='*.ps' --delete-after  www.ietf.org::internet-drafts " + IDDir ],
-			[ "IANA", "rsync -avz --delete-after  www.ietf.org::everything-ftp/iana/ " + IANADir ],
-			[ "IESG", "rsync -avz --delete-after  www.ietf.org::everything-ftp/iesg/ " + IESGDir ],
+				" --exclude='*.ps' --delete-after  ietf.org::internet-drafts " + IDDir ],
+			[ "IANA", "rsync -avz --delete-after  ietf.org::everything-ftp/iana/ " + IANADir ],
+			[ "IESG", "rsync -avz --delete-after  ietf.org::everything-ftp/iesg/ " + IESGDir ],
 			[ "IETF", "rsync -avz --delete-after  --exclude='ipr/' " +
-				"www.ietf.org::everything-ftp/ietf/ " + IETFDir ],
-			[ "charters", "rsync -avz --delete-after  www.ietf.org::everything-ftp/charter/ " + CharterDir ],
+				"ietf.org::everything-ftp/ietf/ " + IETFDir ],
+			[ "charters", "rsync -avz --delete-after  ietf.org::everything-ftp/charter/ " + CharterDir ],
 			[ "RFCs", "rsync -avz --delete-after " +
 				" --exclude='tar*' --exclude='search*' --exclude='PDF-RFC*' " +
 				" --exclude='tst/' --exclude='pdfrfc/' --exclude='internet-drafts/' " +
