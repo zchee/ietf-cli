@@ -62,7 +62,7 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #  1.9
 #    Added "rfcinfo", and changed "tools" to only go to the tools.ietf.org site
 #  1.10
-#    Changed the rsync targets from www.ietf.org to ietf.org
+#    Changed the rsync targets from www.ietf.org to rsync.ietf.org
 
 ##########
 # Utility functions and definitions
@@ -603,12 +603,12 @@ def Cmd_mirror(Args):
 	else:
 		AllActions = [
 			[ "Internet Drafts", "rsync -avz --exclude='*.xml' --exclude='*.pdf' --exclude='*.p7s' " +
-				" --exclude='*.ps' --delete-after  ietf.org::internet-drafts " + IDDir ],
-			[ "IANA", "rsync -avz --delete-after  ietf.org::everything-ftp/iana/ " + IANADir ],
-			[ "IESG", "rsync -avz --delete-after  ietf.org::everything-ftp/iesg/ " + IESGDir ],
+				" --exclude='*.ps' --delete-after  rsync.ietf.org::internet-drafts " + IDDir ],
+			[ "IANA", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/iana/ " + IANADir ],
+			[ "IESG", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/iesg/ " + IESGDir ],
 			[ "IETF", "rsync -avz --delete-after  --exclude='ipr/' " +
 				"ietf.org::everything-ftp/ietf/ " + IETFDir ],
-			[ "charters", "rsync -avz --delete-after  ietf.org::everything-ftp/charter/ " + CharterDir ],
+			[ "charters", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/charter/ " + CharterDir ],
 			[ "RFCs", "rsync -avz --delete-after " +
 				" --exclude='tar*' --exclude='search*' --exclude='PDF-RFC*' " +
 				" --exclude='tst/' --exclude='pdfrfc/' --exclude='internet-drafts/' " +
