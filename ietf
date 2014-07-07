@@ -63,6 +63,8 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Added "rfcinfo", and changed "tools" to only go to the tools.ietf.org site
 #  1.10
 #    Changed the rsync targets from www.ietf.org to rsync.ietf.org
+#  1.11
+#    Mirror conflict reviews and status changes when updating, but don't expose them in the UI
 
 ##########
 # Utility functions and definitions
@@ -609,6 +611,8 @@ def Cmd_mirror(Args):
 			[ "IETF", "rsync -avz --delete-after  --exclude='ipr/' " +
 				"ietf.org::everything-ftp/ietf/ " + IETFDir ],
 			[ "charters", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/charter/ " + CharterDir ],
+			[ "conflic reviews", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/conflict-reviews/ " + ConflictDir ],
+			[ "status changes", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/status-changes/ " + StatusDir ],
 			[ "RFCs", "rsync -avz --delete-after " +
 				" --exclude='tar*' --exclude='search*' --exclude='PDF-RFC*' " +
 				" --exclude='tst/' --exclude='pdfrfc/' --exclude='internet-drafts/' " +
