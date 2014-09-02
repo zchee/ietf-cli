@@ -19,7 +19,7 @@ Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
 __version__ = "1.10"
-__license__ = "http://en.wikipedia.org/wiki/WTFPL"
+__license__ = "https://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
 #  1.0
@@ -65,6 +65,8 @@ __license__ = "http://en.wikipedia.org/wiki/WTFPL"
 #    Changed the rsync targets from www.ietf.org to rsync.ietf.org
 #  1.11
 #    Mirror conflict reviews and status changes when updating, but don't expose them in the UI
+#  1.12
+#    Changed all http: URIs to https:
 
 ##########
 # Utility functions and definitions
@@ -280,7 +282,7 @@ def Cmd_auth48(Args):
 		# Open the local diff in the browser 
 		WebDisplay("file:///", pathjoin(FullRFCDir, "authors", RFCfile + "-diff.html"))
 		# Show the status on the RFC Editor's site
-		WebDisplay("http://www.rfc-editor.org/auth48/", RFCfile)
+		WebDisplay("https://www.rfc-editor.org/auth48/", RFCfile)
 	for ThisArg in Args:
 		# If it is just a number, check for the RFC
 		if ThisArg.isdigit():
@@ -424,7 +426,7 @@ def Cmd_diff(Args):
 		return
 	for ThisArg in Args:
 		if ThisArg.startswith("draft-"):
-			WebDisplay("http://tools.ietf.org/rfcdiff?url2=", ThisArg)
+			WebDisplay("https://tools.ietf.org/rfcdiff?url2=", ThisArg)
 		else:
 			print("The argument to this command must begin with 'draft-'.\n")
 
@@ -684,7 +686,7 @@ def Cmd_mirror(Args):
 
 	# Make the RFC status database to make rfc status searching faster
 	PrintLog("Making the RFC status index")
-	TagBase = "{http://www.rfc-editor.org/rfc-index}"
+	TagBase = "{https://www.rfc-editor.org/rfc-index}"
 	try:
 		ParsedRFCDB = ElTree.parse(pathjoin(FullRFCDir, "rfc-index.xml"))
 	except:
@@ -812,7 +814,7 @@ def Cmd_rfcextra(Args):
 					Cmd_rfcextra([ThisUpdated])
 			if ThisRFCStatus.get("errata") == True:
 				print("RFC " + ThisArg + " has errata")
-				WebDisplay("http://www.rfc-editor.org/errata_search.php?rfc=", ThisArg)
+				WebDisplay("https://www.rfc-editor.org/errata_search.php?rfc=", ThisArg)
 
 ### rfcinfo -- Show RFC information on the RFC Editor site
 def Cmd_rfcinfo(Args):
@@ -823,10 +825,10 @@ def Cmd_rfcinfo(Args):
 	for ThisArg in Args:
 		# If it is just a number, check for the RFC
 		if ThisArg.isdigit():
-			WebDisplay("http://www.rfc-editor.org/info/rfc", ThisArg)
+			WebDisplay("https://www.rfc-editor.org/info/rfc", ThisArg)
 		# If it starts with "rfc" and rest are digits, it is also an RFC
 		elif (ThisArg.startswith("rfc") and  ThisArg[3:].isdigit()):
-			WebDisplay("http://www.rfc-editor.org/info/", ThisArg)
+			WebDisplay("https://www.rfc-editor.org/info/", ThisArg)
 		else:
 			print("This command is for finding RFCs on the RFC Editor's site web site.\n")
 
@@ -874,16 +876,16 @@ def Cmd_tools(Args):
 	for ThisArg in Args:
 		# If it is just a number, check for the RFC
 		if ThisArg.isdigit():
-			WebDisplay("http://tools.ietf.org/html/rfc", ThisArg)
+			WebDisplay("https://tools.ietf.org/html/rfc", ThisArg)
 		# If it starts with "rfc" and rest are digits, it is also an RFC
 		elif (ThisArg.startswith("rfc") and  ThisArg[3:].isdigit()):
-			WebDisplay("http://tools.ietf.org/html/", ThisArg)
+			WebDisplay("https:tools.ietf.org/html/", ThisArg)
 		# If it isn't an RFC and it has no hyphens, assume it is a WG
 		elif ThisArg.find("-") == -1:
-			WebDisplay("http://tools.ietf.org/wg/", ThisArg)
+			WebDisplay("https:tools.ietf.org/wg/", ThisArg)
 		# Otherwise, assume it is a draft; this might get a 404
 		elif ThisArg.startswith("draft-"):
-			WebDisplay("http://tools.ietf.org/html/", ThisArg)
+			WebDisplay("https:tools.ietf.org/html/", ThisArg)
 		else:
 			print("This command is for finding RFCs, WGs (with no hypens) or drafts\n(that start with 'draft-')" \
 				+ " on the IETF Tools web site.\n")
