@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.10"
+__version__ = "1.13"
 __license__ = "https://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -67,6 +67,8 @@ __license__ = "https://en.wikipedia.org/wiki/WTFPL"
 #    Mirror conflict reviews and status changes when updating, but don't expose them in the UI
 #  1.12
 #    Changed all http: URIs to https:
+#  1.13
+#    Fixed ietf-rfc-status.json generation, and fixed a minor typo
 
 ##########
 # Utility functions and definitions
@@ -613,7 +615,7 @@ def Cmd_mirror(Args):
 			[ "IETF", "rsync -avz --delete-after  --exclude='ipr/' " +
 				"ietf.org::everything-ftp/ietf/ " + IETFDir ],
 			[ "charters", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/charter/ " + CharterDir ],
-			[ "conflic reviews", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/conflict-reviews/ " + ConflictDir ],
+			[ "conflict reviews", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/conflict-reviews/ " + ConflictDir ],
 			[ "status changes", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/status-changes/ " + StatusDir ],
 			[ "RFCs", "rsync -avz --delete-after " +
 				" --exclude='tar*' --exclude='search*' --exclude='PDF-RFC*' " +
@@ -686,7 +688,7 @@ def Cmd_mirror(Args):
 
 	# Make the RFC status database to make rfc status searching faster
 	PrintLog("Making the RFC status index")
-	TagBase = "{https://www.rfc-editor.org/rfc-index}"
+	TagBase = "{http://www.rfc-editor.org/rfc-index}"
 	try:
 		ParsedRFCDB = ElTree.parse(pathjoin(FullRFCDir, "rfc-index.xml"))
 	except:
