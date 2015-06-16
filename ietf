@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.13"
+__version__ = "1.14"
 __license__ = "https://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -69,6 +69,8 @@ __license__ = "https://en.wikipedia.org/wiki/WTFPL"
 #    Changed all http: URIs to https:
 #  1.13
 #    Fixed ietf-rfc-status.json generation, and fixed a minor typo
+#  1.14
+#    Changed the location of the IESG directory, which had been broken for a while
 
 ##########
 # Utility functions and definitions
@@ -611,7 +613,7 @@ def Cmd_mirror(Args):
 			[ "Internet Drafts", "rsync -avz --exclude='*.xml' --exclude='*.pdf' --exclude='*.p7s' " +
 				" --exclude='*.ps' --delete-after  rsync.ietf.org::internet-drafts " + IDDir ],
 			[ "IANA", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/iana/ " + IANADir ],
-			[ "IESG", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/iesg/ " + IESGDir ],
+			[ "IESG", "rsync -avz --delete-after  rsync.ietf.org::iesg-minutes/ " + IESGDir ],
 			[ "IETF", "rsync -avz --delete-after  --exclude='ipr/' " +
 				"ietf.org::everything-ftp/ietf/ " + IETFDir ],
 			[ "charters", "rsync -avz --delete-after  rsync.ietf.org::everything-ftp/charter/ " + CharterDir ],
