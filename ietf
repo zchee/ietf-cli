@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ElTree
 Program to help command-line users have better access to IETF-related documents
    See help text below.
 '''
-__version__ = "1.14"
+__version__ = "1.15"
 __license__ = "https://en.wikipedia.org/wiki/WTFPL"
 
 # Version history:
@@ -71,6 +71,9 @@ __license__ = "https://en.wikipedia.org/wiki/WTFPL"
 #    Fixed ietf-rfc-status.json generation, and fixed a minor typo
 #  1.14
 #    Changed the location of the IESG directory, which had been broken for a while
+#  1.15
+#    Lower-cased the inputs to match arguments better
+#    Caused a bug in the AUTH48 HTMLs to not cause the program to die
 
 ##########
 # Utility functions and definitions
@@ -101,8 +104,12 @@ def FindDraftInAuth48(basename):
 		except:
 			exit("Weird: could not read '" + ThisDiff + "' even though it exists. Exit.")
 		for InText in InTextLines[0:40]:
-			if InText.find("<strike><font color='red'>" + basename) > -1:
-				return(ThisDiff.replace(pathjoin(FullRFCDir, "authors", ""), "").replace("-diff.html", ""))
+			### The following try/except is needed due to erroneous non-ASCII text in some of these HTML files
+			try:
+				if InText.find("<strike><font color='red'>" + basename) > -1:
+					return(ThisDiff.replace(pathjoin(FullRFCDir, "authors", ""), "").replace("-diff.html", ""))
+			except:
+				pass
 	return("")  # Only here if there was no file in AUTH48
 
 # Open a URL in the browser, but give a warning in the terminal if the command is "less"
@@ -389,6 +396,7 @@ def Cmd_charter(Args):
 		return
 	FillAllWGsInIETF()
 	for ThisArg in Args:
+		ThisArg = ThisArg.lower()
 		MatchingWGs = fnfilter(sorted(AllWGsInIETF.keys()), "*" + ThisArg + "*")
 		if len(MatchingWGs) > 10:
 			AllMatched = ", ".join(MatchingWGs)
@@ -878,6 +886,7 @@ def Cmd_tools(Args):
 		print("Must give at least one RFC, WG, or draft name; skipping.")
 		return
 	for ThisArg in Args:
+		ThisArg = ThisArg.lower()
 		# If it is just a number, check for the RFC
 		if ThisArg.isdigit():
 			WebDisplay("https://tools.ietf.org/html/rfc", ThisArg)
@@ -901,6 +910,7 @@ def Cmd_tracker(Args):
 		print("Must give at least one WG or draft name; skipping.")
 		return
 	for ThisArg in Args:
+		ThisArg = ThisArg.lower()
 		# If it is just a number, check for the RFC
 		if ThisArg.isdigit():
 			WebDisplay("https://datatracker.ietf.org/doc/rfc", ThisArg)
